@@ -18,12 +18,14 @@ enum WeedType {
 enum Drugs {
     Weed(WeedType),
     Meth,
+    Cocaine,
 }
 
 fn base_price(drug: Drugs) -> f64 {
     match drug {
         Drugs::Weed(_) => 35.0,
         Drugs::Meth => 70.0,
+        Drugs::Cocaine => 150.0,
     }
 }
 
@@ -63,8 +65,32 @@ struct Args {
     #[arg(long)]
     rules: PathBuf,
 
+    #[arg(long, default_value_t = false)]
+    cocaine: bool,
+
+    #[arg(long, default_value_t = false)]
+    meth: bool,
+
+    #[arg(long, default_value_t = false, conflicts_with = "all_weed")]
+    kush: bool,
+
+    #[arg(long, default_value_t = false, conflicts_with = "all_weed")]
+    diesel: bool,
+
+    #[arg(long, default_value_t = false, conflicts_with = "all_weed")]
+    crack: bool,
+
+    #[arg(long, default_value_t = false, conflicts_with = "all_weed")]
+    purple: bool,
+
+    #[arg(long, default_value_t = false)]
+    all_weed: bool,
+
     #[arg(long)]
     num_mixins: usize,
+
+    #[arg(long)]
+    max_results: usize,
 }
 
 // Example main function to demonstrate usage
@@ -73,17 +99,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let rules = parse_rules_file(args.rules)?;
 
-    let mut queue: Vec<_> = [
-        Drugs::Weed(WeedType::OGKush),
-        Drugs::Weed(WeedType::SourDiesel),
-        Drugs::Weed(WeedType::GreenCrack),
-        Drugs::Weed(WeedType::GranddaddyPurple),
-    ]
-    .into_iter()
-    .map(|drug| (drug, vec![], inherent_effects(drug)))
-    .collect();
+    let mut queue: Vec<_> = vec![];
 
-    let mut top = TopSet::new(5, PartialOrd::gt);
+    if args.cocaine {
+        queue.push(Drugs::Cocaine);
+    }
+    if args.meth {
+        queue.push(Drugs::Meth);
+    }
+    if args.kush || args.all_weed {
+        queue.push(Drugs::Weed(WeedType::OGKush));
+    }
+    if args.diesel || args.all_weed {
+        queue.push(Drugs::Weed(WeedType::SourDiesel));
+    }
+    if args.crack || args.all_weed {
+        queue.push(Drugs::Weed(WeedType::GreenCrack));
+    }
+    if args.purple || args.all_weed {
+        queue.push(Drugs::Weed(WeedType::GranddaddyPurple));
+    }
+
+    let mut queue: Vec<_> = queue
+        .into_iter()
+        .map(|drug| (drug, vec![], inherent_effects(drug)))
+        .collect();
+
+    let mut top = TopSet::new(args.max_results, PartialOrd::gt);
 
     while let Some((item, substances, effects)) = queue.pop() {
         let price = (base_price(item) * rules.price_multiplier(effects.iter())).round() as i64;
