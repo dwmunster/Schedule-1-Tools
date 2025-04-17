@@ -4,6 +4,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
+const MAX_EFFECTS: usize = 8;
+
 // Define our Effect and Substance types
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
 pub enum Effect {
@@ -129,12 +131,11 @@ impl MixtureRules {
         let replacements = self.replacement_rules.get(&substance).unwrap();
         let inherent_effects = self.inherent_effects.get(&substance);
 
+        let old = effects.clone();
+
         for rule in replacements {
             // Check if all required effects are present
-            let present_check = rule
-                .if_present
-                .iter()
-                .all(|effect| effects.contains(effect));
+            let present_check = rule.if_present.iter().all(|effect| old.contains(effect));
 
             // Check if all excluded effects are absent
             let absent_check = rule
@@ -155,7 +156,12 @@ impl MixtureRules {
         let Some(inherent_effects) = inherent_effects else {
             return;
         };
-        effects.extend(inherent_effects);
+        for effect in inherent_effects {
+            if effects.len() >= MAX_EFFECTS {
+                return;
+            }
+            effects.insert(*effect);
+        }
     }
 
     pub fn price_multiplier<'a>(&self, effects: impl Iterator<Item = &'a Effect>) -> f64 {
@@ -311,5 +317,56 @@ fn string_to_effect(s: &str) -> Effect {
         "Tt" => Effect::TropicThunder,
         "Zo" => Effect::Zombifying,
         _ => panic!("Unknown effect: {}", s),
+    }
+}
+
+mod tests {
+    use crate::mixing::{parse_rules_file, Effect, Substance};
+    use std::collections::BTreeSet;
+    use std::error::Error;
+
+    #[test]
+    fn test_regression_cocaine() -> Result<(), Box<dyn Error>> {
+        let rules = parse_rules_file("sch1-mix-rules.json")?;
+
+        let mut effects = BTreeSet::new();
+
+        // First mix
+        rules.apply(Substance::HorseSemen, &mut effects);
+        assert_eq!(effects, [Effect::LongFaced].into());
+
+        // Second mix
+        rules.apply(Substance::Addy, &mut effects);
+        assert_eq!(
+            effects,
+            [Effect::Electrifying, Effect::ThoughtProvoking].into()
+        );
+
+        // Third mix
+        rules.apply(Substance::Battery, &mut effects);
+        assert_eq!(
+            effects,
+            [
+                Effect::Euphoric,
+                Effect::ThoughtProvoking,
+                Effect::BrightEyed
+            ]
+            .into()
+        );
+
+        // Fourth mix
+        rules.apply(Substance::HorseSemen, &mut effects);
+        assert_eq!(
+            effects,
+            [
+                Effect::Electrifying,
+                Effect::BrightEyed,
+                Effect::LongFaced,
+                Effect::Euphoric
+            ]
+            .into()
+        );
+
+        Ok(())
     }
 }
