@@ -1,8 +1,12 @@
 use crate::mixing::{parse_rules_file, Effects, MixtureRules, Substance, SUBSTANCES};
 use clap::Parser;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::cmp::min;
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::{mpsc, Arc};
+use std::time::Duration;
+use threadpool::ThreadPool;
 use topset::TopSet;
 
 mod mixing;
@@ -15,11 +19,36 @@ enum WeedType {
     GranddaddyPurple,
 }
 
+impl Display for WeedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WeedType::OGKush => write!(f, "OG Kush"),
+            WeedType::SourDiesel => write!(f, "Sour Diesel"),
+            WeedType::GreenCrack => write!(f, "Green Crack"),
+            WeedType::GranddaddyPurple => write!(f, "Granddaddy Purple"),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 enum Drugs {
     Weed(WeedType),
     Meth,
     Cocaine,
+}
+
+impl Display for Drugs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Drugs::Weed(w) => w.fmt(f),
+            Drugs::Meth => {
+                write!(f, "Meth")
+            }
+            Drugs::Cocaine => {
+                write!(f, "Cocaine")
+            }
+        }
+    }
 }
 
 fn base_price(drug: Drugs) -> f64 {
@@ -101,7 +130,7 @@ struct Args {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let rules = parse_rules_file(args.rules)?;
+    let rules = Arc::new(parse_rules_file(args.rules)?);
 
     let mut queue: Vec<_> = vec![];
 
@@ -154,22 +183,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             precompute_queue = new_queue;
         }
 
-        for subresult in precompute_queue
-            .into_par_iter()
-            .flat_map(|i| depth_first_search(&rules, i, args.max_results, args.num_mixins))
-            .collect::<Vec<_>>()
-        {
-            if !top
-                .iter()
-                .any(|(p, i)| *p == subresult.0 && i.effects == subresult.1.effects)
-            {
-                top.insert(subresult);
+        let bar = ProgressBar::new(precompute_queue.len() as u64).with_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise} / ETA: {eta}] {bar} {pos:>7}/{len:7}\n{wide_msg}",
+            )
+            .unwrap(),
+        );
+        bar.enable_steady_tick(Duration::from_millis(100));
+
+        let (tx, rx) = mpsc::channel();
+
+        let pool = ThreadPool::new(num_cpus::get());
+        for item in precompute_queue {
+            let tx = tx.clone();
+            let rules = rules.clone();
+            pool.execute(move || {
+                let res = depth_first_search(&rules, item, args.max_results, args.num_mixins);
+                tx.send(res).unwrap();
+            });
+        }
+
+        drop(tx);
+        for v in rx {
+            bar.inc(1);
+            for subresult in v {
+                if !top
+                    .iter()
+                    .any(|(p, i)| *p == subresult.0 && i.effects == subresult.1.effects)
+                {
+                    top.insert(subresult);
+                    let Some(best) = top.iter().max() else {
+                        continue;
+                    };
+                    bar.set_message(format!("{}, {:?}", best.0, best.1));
+                }
             }
         }
     }
 
     for item in top.into_sorted_vec().iter().rev() {
-        println!("{:?}", item);
+        println!("{:#?}", item);
     }
 
     Ok(())
