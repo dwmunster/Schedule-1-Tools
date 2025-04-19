@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use topological_sort::TopologicalSort;
 
 const MAX_EFFECTS: usize = 8;
 
@@ -85,7 +86,7 @@ pub const SUBSTANCES: &[Substance] = &[
 ];
 
 // Define our Rule structure
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Rule {
     pub if_present: Vec<Effect>,
     pub if_not_present: Vec<Effect>,
@@ -131,11 +132,12 @@ impl MixtureRules {
         let replacements = self.replacement_rules.get(&substance).unwrap();
         let inherent_effects = self.inherent_effects.get(&substance);
 
-        let old = effects.clone();
-
         for rule in replacements {
             // Check if all required effects are present
-            let present_check = rule.if_present.iter().all(|effect| old.contains(effect));
+            let present_check = rule
+                .if_present
+                .iter()
+                .all(|effect| effects.contains(effect));
 
             // Check if all excluded effects are absent
             let absent_check = rule
@@ -226,6 +228,22 @@ pub fn parse_rules_file<P: AsRef<Path>>(
             .entry(substance)
             .or_insert_with(Vec::new)
             .push(rule);
+    }
+
+    // Topo sort the replacement rules
+    // if {A -> B, B -> C} is applied to {A, B}, should end up with {B, C}
+    for rules in replacement_rules.values_mut() {
+        let mut ts = TopologicalSort::<&[Effect]>::new();
+        for rule in rules.iter() {
+            ts.add_dependency(&*rule.if_not_present, &*rule.if_present);
+        }
+        let mut new_order = Vec::with_capacity(rules.len());
+        for effects in ts {
+            if let Some(r) = rules.iter().find(|r| r.if_present == effects) {
+                new_order.push(r.clone());
+            }
+        }
+        *rules = new_order;
     }
 
     // Convert inherent effects
@@ -320,6 +338,7 @@ fn string_to_effect(s: &str) -> Effect {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::mixing::{parse_rules_file, Effect, Substance};
     use std::collections::BTreeSet;
@@ -366,6 +385,81 @@ mod tests {
             ]
             .into()
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_regression_cocaine2() -> Result<(), Box<dyn Error>> {
+        let rules = parse_rules_file("sch1-mix-rules.json")?;
+
+        let mut effects = BTreeSet::new();
+
+        // First mix
+        rules.apply(Substance::MegaBean, &mut effects);
+        assert_eq!(effects, [Effect::Foggy].into());
+
+        // Second mix
+        rules.apply(Substance::Cuke, &mut effects);
+        assert_eq!(effects, [Effect::Cyclopean, Effect::Energizing].into());
+
+        // Third mix
+        rules.apply(Substance::Banana, &mut effects);
+        assert_eq!(
+            effects,
+            [
+                Effect::Energizing,
+                Effect::ThoughtProvoking,
+                Effect::Gingeritis
+            ]
+            .into()
+        );
+
+        // Fourth mix
+        rules.apply(Substance::HorseSemen, &mut effects);
+        assert_eq!(
+            effects,
+            [
+                Effect::Energizing,
+                Effect::Electrifying,
+                Effect::Refreshing,
+                Effect::LongFaced
+            ]
+            .into()
+        );
+
+        // Fifth mix
+        rules.apply(Substance::Iodine, &mut effects);
+        assert_eq!(
+            effects,
+            [
+                Effect::Energizing,
+                Effect::Electrifying,
+                Effect::ThoughtProvoking,
+                Effect::LongFaced,
+                Effect::Jennerising
+            ]
+            .into()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_price_regression() -> Result<(), Box<dyn Error>> {
+        let rules = parse_rules_file("sch1-mix-rules.json")?;
+        let effects: BTreeSet<_> = [
+            Effect::AntiGravity,
+            Effect::Glowing,
+            Effect::TropicThunder,
+            Effect::Zombifying,
+            Effect::Cyclopean,
+            Effect::Foggy,
+            Effect::BrightEyed,
+        ]
+        .into();
+        let price = (150.0 * rules.price_multiplier(effects.iter())).round() as i64;
+        assert_eq!(price, 657);
 
         Ok(())
     }

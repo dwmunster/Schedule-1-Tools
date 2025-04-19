@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.36", features = ["derive"] }
+rayon = "1.10.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
+topological-sort = "0.2.2"
 topset = "0.4.0"
