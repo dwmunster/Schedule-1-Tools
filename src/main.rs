@@ -1,6 +1,7 @@
 use crate::mixing::{parse_rules_file, Effects, MixtureRules, Substance, SUBSTANCES};
 use clap::Parser;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use std::cmp::min;
 use std::path::PathBuf;
 use topset::TopSet;
 
@@ -91,6 +92,9 @@ struct Args {
 
     #[arg(long)]
     max_results: usize,
+
+    #[arg(long, default_value_t = 2)]
+    precompute_layers: usize,
 }
 
 // Example main function to demonstrate usage
@@ -132,16 +136,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut top = TopSet::new(args.max_results, PartialOrd::gt);
 
     while let Some(item) = queue.pop() {
-        // We will do the first iteration and then spawn threads to handle each of the initial substances
+        // We will do the first N iterations and then spawn threads to handle each of the initial substances
         let p = profit(&item, &rules);
         top.insert((p, item.clone()));
 
-        let level_one: Vec<_> = SUBSTANCES
-            .iter()
-            .filter_map(|s| apply_substance(&item, *s, &rules))
-            .collect();
+        let mut precompute_queue = vec![item];
 
-        for subresult in level_one
+        for _ in 0..min(args.num_mixins, args.precompute_layers) {
+            let mut new_queue = Vec::with_capacity(precompute_queue.len() * SUBSTANCES.len());
+            for item in precompute_queue {
+                new_queue.extend(
+                    SUBSTANCES
+                        .iter()
+                        .filter_map(|s| apply_substance(&item, *s, &rules)),
+                )
+            }
+            precompute_queue = new_queue;
+        }
+
+        for subresult in precompute_queue
             .into_par_iter()
             .flat_map(|i| depth_first_search(&rules, i, args.max_results, args.num_mixins))
             .collect::<Vec<_>>()
