@@ -1,49 +1,51 @@
+use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use topological_sort::TopologicalSort;
 
-const MAX_EFFECTS: usize = 8;
+const MAX_EFFECTS: u32 = 8;
 
-// Define our Effect and Substance types
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
-pub enum Effect {
-    AntiGravity,
-    Athletic,
-    Balding,
-    BrightEyed,
-    Calming,
-    CalorieDense,
-    Cyclopean,
-    Disorienting,
-    Electrifying,
-    Energizing,
-    Euphoric,
-    Explosive,
-    Focused,
-    Foggy,
-    Gingeritis,
-    Glowing,
-    Jennerising,
-    Laxative,
-    LongFaced,
-    Munchies,
-    Paranoia,
-    Refreshing,
-    Schizophrenia,
-    Sedating,
-    Shrinking,
-    SeizureInducing,
-    Slippery,
-    Smelly,
-    Sneaky,
-    Spicy,
-    Toxic,
-    ThoughtProvoking,
-    TropicThunder,
-    Zombifying,
+bitflags! {
+    #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
+    pub struct Effects: u64 {
+    const AntiGravity = 1 << 0;
+    const Athletic = 1 << 1;
+    const Balding = 1 << 2;
+    const BrightEyed = 1 << 3;
+    const Calming = 1 << 4;
+    const CalorieDense = 1 << 5;
+    const Cyclopean = 1 << 6;
+    const Disorienting = 1 << 7;
+    const Electrifying = 1 << 8;
+    const Energizing = 1 << 9;
+    const Euphoric = 1 << 10;
+    const Explosive = 1 << 11;
+    const Focused = 1 << 12;
+    const Foggy = 1 << 13;
+    const Gingeritis = 1 << 14;
+    const Glowing = 1 << 15;
+    const Jennerising = 1 << 16;
+    const Laxative = 1 << 17;
+    const LongFaced = 1 << 18;
+    const Munchies = 1 << 19;
+    const Paranoia = 1 << 20;
+    const Refreshing = 1 << 21;
+    const Schizophrenia = 1 << 22;
+    const Sedating = 1 << 23;
+    const Shrinking = 1 << 24;
+    const SeizureInducing = 1 << 25;
+    const Slippery = 1 << 26;
+    const Smelly = 1 << 27;
+    const Sneaky = 1 << 28;
+    const Spicy = 1 << 29;
+    const Toxic = 1 << 30;
+    const ThoughtProvoking = 1 << 31;
+    const TropicThunder = 1 << 32;
+    const Zombifying = 1 << 33;
+}
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
@@ -86,11 +88,12 @@ pub const SUBSTANCES: &[Substance] = &[
 ];
 
 // Define our Rule structure
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Rule {
-    pub if_present: Vec<Effect>,
-    pub if_not_present: Vec<Effect>,
-    pub replace: Vec<(Effect, Effect)>,
+    pub if_present: Effects,
+    pub if_not_present: Effects,
+    pub remove: Effects,
+    pub add: Effects,
 }
 
 // JSON input structures for deserialization
@@ -123,55 +126,38 @@ struct RulesFile {
 
 pub struct MixtureRules {
     replacement_rules: BTreeMap<Substance, Vec<Rule>>,
-    inherent_effects: BTreeMap<Substance, Vec<Effect>>,
-    price_map: BTreeMap<Effect, f64>,
+    inherent_effects: BTreeMap<Substance, Effects>,
+    price_map: BTreeMap<Effects, f64>,
 }
 
 impl MixtureRules {
-    pub fn apply(&self, substance: Substance, effects: &mut BTreeSet<Effect>) {
+    pub fn apply(&self, substance: Substance, effects: &mut Effects) {
         let replacements = self.replacement_rules.get(&substance).unwrap();
-        let inherent_effects = self.inherent_effects.get(&substance);
+        let inherent_effects = self
+            .inherent_effects
+            .get(&substance)
+            .copied()
+            .unwrap_or(Effects::empty());
 
         for rule in replacements {
-            // Check if all required effects are present
-            let present_check = rule
-                .if_present
-                .iter()
-                .all(|effect| effects.contains(effect));
-
-            // Check if all excluded effects are absent
-            let absent_check = rule
-                .if_not_present
-                .iter()
-                .all(|effect| !effects.contains(effect));
-
-            // If all conditions are met, apply the replacements
-            if present_check && absent_check {
-                for (from, to) in &rule.replace {
-                    if effects.remove(from) {
-                        effects.insert(*to);
-                    }
-                }
+            if effects.contains(rule.if_present) && !effects.contains(rule.if_not_present) {
+                effects.remove(rule.remove);
+                effects.insert(rule.add);
             }
         }
 
-        let Some(inherent_effects) = inherent_effects else {
-            return;
-        };
-        for effect in inherent_effects {
-            if effects.len() >= MAX_EFFECTS {
-                return;
-            }
-            effects.insert(*effect);
+        let n_effects = effects.bits().count_ones();
+        if n_effects < MAX_EFFECTS {
+            effects.insert(inherent_effects);
         }
     }
 
-    pub fn price_multiplier<'a>(&self, effects: impl Iterator<Item = &'a Effect>) -> f64 {
+    pub fn price_multiplier(&self, effects: Effects) -> f64 {
         let base = 1.0;
         let mut multiplier = 0.;
 
         for effect in effects {
-            multiplier += self.price_map.get(effect).copied().unwrap_or_default();
+            multiplier += self.price_map.get(&effect).copied().unwrap_or_default();
         }
 
         base + multiplier
@@ -203,24 +189,27 @@ pub fn parse_rules_file<P: AsRef<Path>>(
             .if_present
             .iter()
             .map(|s| string_to_effect(s))
-            .collect::<Vec<Effect>>();
+            .fold(Effects::empty(), |a, b| a | b);
 
         let if_not_present = rule_json
             .if_not_present
             .iter()
             .map(|s| string_to_effect(s))
-            .collect::<Vec<Effect>>();
+            .fold(Effects::empty(), |a, b| a | b);
 
         // Parse the replacements
-        let mut replace = Vec::new();
+        let mut remove = Effects::empty();
+        let mut add = Effects::empty();
         for (from, to) in rule_json.replace.entries.iter() {
-            replace.push((string_to_effect(from), string_to_effect(to)));
+            remove |= string_to_effect(from);
+            add |= string_to_effect(to);
         }
 
         let rule = Rule {
             if_present,
             if_not_present,
-            replace,
+            remove,
+            add,
         };
 
         // Add to our HashMap
@@ -233,9 +222,9 @@ pub fn parse_rules_file<P: AsRef<Path>>(
     // Topo sort the replacement rules
     // if {A -> B, B -> C} is applied to {A, B}, should end up with {B, C}
     for rules in replacement_rules.values_mut() {
-        let mut ts = TopologicalSort::<&[Effect]>::new();
+        let mut ts = TopologicalSort::<Effects>::new();
         for rule in rules.iter() {
-            ts.add_dependency(&*rule.if_not_present, &*rule.if_present);
+            ts.add_dependency(rule.if_not_present, rule.if_present);
         }
         let mut new_order = Vec::with_capacity(rules.len());
         for effects in ts {
@@ -253,8 +242,8 @@ pub fn parse_rules_file<P: AsRef<Path>>(
         let effects = effect_json
             .effect
             .iter()
-            .map(|e| string_to_effect(e))
-            .collect::<Vec<Effect>>();
+            .map(|s| string_to_effect(s))
+            .fold(Effects::empty(), |a, b| a | b);
         inherent_effects.insert(substance, effects);
     }
 
@@ -298,92 +287,77 @@ fn string_to_substance(substance: &str) -> Option<Substance> {
 }
 
 // Helper function to convert string to Effect enum
-fn string_to_effect(s: &str) -> Effect {
+fn string_to_effect(s: &str) -> Effects {
     match s {
-        "Ag" => Effect::AntiGravity,
-        "At" => Effect::Athletic,
-        "Ba" => Effect::Balding,
-        "Be" => Effect::BrightEyed,
-        "Ca" => Effect::Calming,
-        "Cd" => Effect::CalorieDense,
-        "Cy" => Effect::Cyclopean,
-        "Di" => Effect::Disorienting,
-        "El" => Effect::Electrifying,
-        "En" => Effect::Energizing,
-        "Eu" => Effect::Euphoric,
-        "Ex" => Effect::Explosive,
-        "Fc" => Effect::Focused,
-        "Fo" => Effect::Foggy,
-        "Gi" => Effect::Gingeritis,
-        "Gl" => Effect::Glowing,
-        "Je" => Effect::Jennerising,
-        "La" => Effect::Laxative,
-        "Lf" => Effect::LongFaced,
-        "Mu" => Effect::Munchies,
-        "Pa" => Effect::Paranoia,
-        "Re" => Effect::Refreshing,
-        "Sc" => Effect::Schizophrenia,
-        "Se" => Effect::Sedating,
-        "Sh" => Effect::Shrinking,
-        "Si" => Effect::SeizureInducing,
-        "Sl" => Effect::Slippery,
-        "Sm" => Effect::Smelly,
-        "Sn" => Effect::Sneaky,
-        "Sp" => Effect::Spicy,
-        "To" => Effect::Toxic,
-        "Tp" => Effect::ThoughtProvoking,
-        "Tt" => Effect::TropicThunder,
-        "Zo" => Effect::Zombifying,
+        "Ag" => Effects::AntiGravity,
+        "At" => Effects::Athletic,
+        "Ba" => Effects::Balding,
+        "Be" => Effects::BrightEyed,
+        "Ca" => Effects::Calming,
+        "Cd" => Effects::CalorieDense,
+        "Cy" => Effects::Cyclopean,
+        "Di" => Effects::Disorienting,
+        "El" => Effects::Electrifying,
+        "En" => Effects::Energizing,
+        "Eu" => Effects::Euphoric,
+        "Ex" => Effects::Explosive,
+        "Fc" => Effects::Focused,
+        "Fo" => Effects::Foggy,
+        "Gi" => Effects::Gingeritis,
+        "Gl" => Effects::Glowing,
+        "Je" => Effects::Jennerising,
+        "La" => Effects::Laxative,
+        "Lf" => Effects::LongFaced,
+        "Mu" => Effects::Munchies,
+        "Pa" => Effects::Paranoia,
+        "Re" => Effects::Refreshing,
+        "Sc" => Effects::Schizophrenia,
+        "Se" => Effects::Sedating,
+        "Sh" => Effects::Shrinking,
+        "Si" => Effects::SeizureInducing,
+        "Sl" => Effects::Slippery,
+        "Sm" => Effects::Smelly,
+        "Sn" => Effects::Sneaky,
+        "Sp" => Effects::Spicy,
+        "To" => Effects::Toxic,
+        "Tp" => Effects::ThoughtProvoking,
+        "Tt" => Effects::TropicThunder,
+        "Zo" => Effects::Zombifying,
         _ => panic!("Unknown effect: {}", s),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::mixing::{parse_rules_file, Effect, Substance};
-    use std::collections::BTreeSet;
+    use crate::mixing::{parse_rules_file, Effects, Substance};
     use std::error::Error;
 
     #[test]
     fn test_regression_cocaine() -> Result<(), Box<dyn Error>> {
         let rules = parse_rules_file("sch1-mix-rules.json")?;
 
-        let mut effects = BTreeSet::new();
+        let mut effects = Effects::empty();
 
         // First mix
         rules.apply(Substance::HorseSemen, &mut effects);
-        assert_eq!(effects, [Effect::LongFaced].into());
+        assert_eq!(effects, Effects::LongFaced);
 
         // Second mix
         rules.apply(Substance::Addy, &mut effects);
-        assert_eq!(
-            effects,
-            [Effect::Electrifying, Effect::ThoughtProvoking].into()
-        );
+        assert_eq!(effects, Effects::Electrifying | Effects::ThoughtProvoking);
 
         // Third mix
         rules.apply(Substance::Battery, &mut effects);
         assert_eq!(
             effects,
-            [
-                Effect::Euphoric,
-                Effect::ThoughtProvoking,
-                Effect::BrightEyed
-            ]
-            .into()
+            Effects::Euphoric | Effects::ThoughtProvoking | Effects::BrightEyed
         );
 
         // Fourth mix
         rules.apply(Substance::HorseSemen, &mut effects);
         assert_eq!(
             effects,
-            [
-                Effect::Electrifying,
-                Effect::BrightEyed,
-                Effect::LongFaced,
-                Effect::Euphoric
-            ]
-            .into()
+            Effects::Electrifying | Effects::BrightEyed | Effects::LongFaced | Effects::Euphoric
         );
 
         Ok(())
@@ -393,53 +367,39 @@ mod tests {
     fn test_regression_cocaine2() -> Result<(), Box<dyn Error>> {
         let rules = parse_rules_file("sch1-mix-rules.json")?;
 
-        let mut effects = BTreeSet::new();
+        let mut effects = Effects::empty();
 
         // First mix
         rules.apply(Substance::MegaBean, &mut effects);
-        assert_eq!(effects, [Effect::Foggy].into());
+        assert_eq!(effects, Effects::Foggy);
 
         // Second mix
         rules.apply(Substance::Cuke, &mut effects);
-        assert_eq!(effects, [Effect::Cyclopean, Effect::Energizing].into());
+        assert_eq!(effects, Effects::Cyclopean | Effects::Energizing);
 
         // Third mix
         rules.apply(Substance::Banana, &mut effects);
         assert_eq!(
             effects,
-            [
-                Effect::Energizing,
-                Effect::ThoughtProvoking,
-                Effect::Gingeritis
-            ]
-            .into()
+            Effects::Energizing | Effects::ThoughtProvoking | Effects::Gingeritis
         );
 
         // Fourth mix
         rules.apply(Substance::HorseSemen, &mut effects);
         assert_eq!(
             effects,
-            [
-                Effect::Energizing,
-                Effect::Electrifying,
-                Effect::Refreshing,
-                Effect::LongFaced
-            ]
-            .into()
+            Effects::Energizing | Effects::Electrifying | Effects::Refreshing | Effects::LongFaced
         );
 
         // Fifth mix
         rules.apply(Substance::Iodine, &mut effects);
         assert_eq!(
             effects,
-            [
-                Effect::Energizing,
-                Effect::Electrifying,
-                Effect::ThoughtProvoking,
-                Effect::LongFaced,
-                Effect::Jennerising
-            ]
-            .into()
+            Effects::Energizing
+                | Effects::Electrifying
+                | Effects::ThoughtProvoking
+                | Effects::LongFaced
+                | Effects::Jennerising
         );
 
         Ok(())
@@ -448,17 +408,14 @@ mod tests {
     #[test]
     fn test_price_regression() -> Result<(), Box<dyn Error>> {
         let rules = parse_rules_file("sch1-mix-rules.json")?;
-        let effects: BTreeSet<_> = [
-            Effect::AntiGravity,
-            Effect::Glowing,
-            Effect::TropicThunder,
-            Effect::Zombifying,
-            Effect::Cyclopean,
-            Effect::Foggy,
-            Effect::BrightEyed,
-        ]
-        .into();
-        let price = (150.0 * rules.price_multiplier(effects.iter())).round() as i64;
+        let effects = Effects::AntiGravity
+            | Effects::Glowing
+            | Effects::TropicThunder
+            | Effects::Zombifying
+            | Effects::Cyclopean
+            | Effects::Foggy
+            | Effects::BrightEyed;
+        let price = (150.0 * rules.price_multiplier(effects)).round() as i64;
         assert_eq!(price, 657);
 
         Ok(())

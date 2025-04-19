@@ -1,7 +1,6 @@
-use crate::mixing::{parse_rules_file, Effect, MixtureRules, Substance, SUBSTANCES};
+use crate::mixing::{parse_rules_file, Effects, MixtureRules, Substance, SUBSTANCES};
 use clap::Parser;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 use topset::TopSet;
 
@@ -30,13 +29,13 @@ fn base_price(drug: Drugs) -> f64 {
     }
 }
 
-fn inherent_effects(drug: Drugs) -> BTreeSet<Effect> {
+fn inherent_effects(drug: Drugs) -> Effects {
     match drug {
-        Drugs::Weed(WeedType::OGKush) => [Effect::Calming].into(),
-        Drugs::Weed(WeedType::SourDiesel) => [Effect::Refreshing].into(),
-        Drugs::Weed(WeedType::GreenCrack) => [Effect::Energizing].into(),
-        Drugs::Weed(WeedType::GranddaddyPurple) => [Effect::Sedating].into(),
-        _ => BTreeSet::new(),
+        Drugs::Weed(WeedType::OGKush) => Effects::Calming,
+        Drugs::Weed(WeedType::SourDiesel) => Effects::Refreshing,
+        Drugs::Weed(WeedType::GreenCrack) => Effects::Energizing,
+        Drugs::Weed(WeedType::GranddaddyPurple) => Effects::Sedating,
+        _ => Effects::empty(),
     }
 }
 
@@ -167,12 +166,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 struct SearchQueueItem {
     drug: Drugs,
     substances: Vec<Substance>,
-    effects: BTreeSet<Effect>,
+    effects: Effects,
 }
 
 fn profit(item: &SearchQueueItem, rules: &MixtureRules) -> i64 {
-    let price =
-        (base_price(item.drug) * rules.price_multiplier(item.effects.iter())).round() as i64;
+    let price = (base_price(item.drug) * rules.price_multiplier(item.effects)).round() as i64;
     price
         - item
             .substances
