@@ -7,45 +7,46 @@ use std::path::Path;
 use topological_sort::TopologicalSort;
 
 const MAX_EFFECTS: u32 = 8;
+const NUM_EFFECTS: usize = 34;
 
 bitflags! {
     #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
     pub struct Effects: u64 {
-    const AntiGravity = 1 << 0;
-    const Athletic = 1 << 1;
-    const Balding = 1 << 2;
-    const BrightEyed = 1 << 3;
-    const Calming = 1 << 4;
-    const CalorieDense = 1 << 5;
-    const Cyclopean = 1 << 6;
-    const Disorienting = 1 << 7;
-    const Electrifying = 1 << 8;
-    const Energizing = 1 << 9;
-    const Euphoric = 1 << 10;
-    const Explosive = 1 << 11;
-    const Focused = 1 << 12;
-    const Foggy = 1 << 13;
-    const Gingeritis = 1 << 14;
-    const Glowing = 1 << 15;
-    const Jennerising = 1 << 16;
-    const Laxative = 1 << 17;
-    const LongFaced = 1 << 18;
-    const Munchies = 1 << 19;
-    const Paranoia = 1 << 20;
-    const Refreshing = 1 << 21;
-    const Schizophrenia = 1 << 22;
-    const Sedating = 1 << 23;
-    const Shrinking = 1 << 24;
-    const SeizureInducing = 1 << 25;
-    const Slippery = 1 << 26;
-    const Smelly = 1 << 27;
-    const Sneaky = 1 << 28;
-    const Spicy = 1 << 29;
-    const Toxic = 1 << 30;
-    const ThoughtProvoking = 1 << 31;
-    const TropicThunder = 1 << 32;
-    const Zombifying = 1 << 33;
-}
+        const AntiGravity = 1 << 0;
+        const Athletic = 1 << 1;
+        const Balding = 1 << 2;
+        const BrightEyed = 1 << 3;
+        const Calming = 1 << 4;
+        const CalorieDense = 1 << 5;
+        const Cyclopean = 1 << 6;
+        const Disorienting = 1 << 7;
+        const Electrifying = 1 << 8;
+        const Energizing = 1 << 9;
+        const Euphoric = 1 << 10;
+        const Explosive = 1 << 11;
+        const Focused = 1 << 12;
+        const Foggy = 1 << 13;
+        const Gingeritis = 1 << 14;
+        const Glowing = 1 << 15;
+        const Jennerising = 1 << 16;
+        const Laxative = 1 << 17;
+        const LongFaced = 1 << 18;
+        const Munchies = 1 << 19;
+        const Paranoia = 1 << 20;
+        const Refreshing = 1 << 21;
+        const Schizophrenia = 1 << 22;
+        const Sedating = 1 << 23;
+        const Shrinking = 1 << 24;
+        const SeizureInducing = 1 << 25;
+        const Slippery = 1 << 26;
+        const Smelly = 1 << 27;
+        const Sneaky = 1 << 28;
+        const Spicy = 1 << 29;
+        const Toxic = 1 << 30;
+        const ThoughtProvoking = 1 << 31;
+        const TropicThunder = 1 << 32;
+        const Zombifying = 1 << 33;
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
@@ -127,7 +128,7 @@ struct RulesFile {
 pub struct MixtureRules {
     replacement_rules: BTreeMap<Substance, Vec<Rule>>,
     inherent_effects: BTreeMap<Substance, Effects>,
-    price_map: BTreeMap<Effects, f64>,
+    price_mults: [f64; NUM_EFFECTS],
 }
 
 impl MixtureRules {
@@ -157,7 +158,8 @@ impl MixtureRules {
         let mut multiplier = 0.;
 
         for effect in effects {
-            multiplier += self.price_map.get(&effect).copied().unwrap_or_default();
+            let idx = effect.bits().ilog2();
+            multiplier += self.price_mults[idx as usize];
         }
 
         base + multiplier
@@ -248,17 +250,18 @@ pub fn parse_rules_file<P: AsRef<Path>>(
     }
 
     // Convert effect price mapping
-    let mut price_map = BTreeMap::new();
+    let mut price_mults = [0.; NUM_EFFECTS];
     for (effect_string, price_string) in &rules_file.effect_price {
         let effect = string_to_effect(effect_string);
+        let idx = effect.bits().ilog2();
         let price = price_string.parse::<f64>()?;
-        price_map.insert(effect, price);
+        price_mults[idx as usize] = price;
     }
 
     Ok(MixtureRules {
         replacement_rules,
         inherent_effects,
-        price_map,
+        price_mults,
     })
 }
 
