@@ -1,5 +1,6 @@
-use crate::mixing::{parse_rules_file, Effect, Substance, SUBSTANCES};
+use crate::mixing::{parse_rules_file, Effect, MixtureRules, Substance, SUBSTANCES};
 use clap::Parser;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use topset::TopSet;
@@ -122,33 +123,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut queue: Vec<_> = queue
         .into_iter()
-        .map(|drug| (drug, vec![], inherent_effects(drug)))
+        .map(|drug| SearchQueueItem {
+            drug,
+            substances: Vec::new(),
+            effects: inherent_effects(drug),
+        })
         .collect();
 
     let mut top = TopSet::new(args.max_results, PartialOrd::gt);
 
-    while let Some((item, substances, effects)) = queue.pop() {
-        let price = (base_price(item) * rules.price_multiplier(effects.iter())).round() as i64;
-        let profit = price - substances.iter().map(|s| substance_cost(*s)).sum::<i64>();
-        if !top.iter().any(|(_, _, _, e)| e == &effects) {
-            top.insert((profit, item, substances.clone(), effects.clone()));
-        }
+    while let Some(item) = queue.pop() {
+        // We will do the first iteration and then spawn threads to handle each of the initial substances
+        let p = profit(&item, &rules);
+        top.insert((p, item.clone()));
 
-        if substances.len() == args.num_mixins {
-            // If we've already assigned TOTAL_STATIONS, then we cannot add more.
-            continue;
-        }
-        for substance in SUBSTANCES.iter().copied() {
-            let mut substances = substances.clone();
-            substances.push(substance);
+        let level_one: Vec<_> = SUBSTANCES
+            .iter()
+            .filter_map(|s| apply_substance(&item, *s, &rules))
+            .collect();
 
-            let mut eff = effects.clone();
-            rules.apply(substance, &mut eff);
-            if effects == eff {
-                // Adding this does nothing, trim the search space by ignoring this option
-                continue;
+        for subresult in level_one
+            .into_par_iter()
+            .flat_map(|i| depth_first_search(&rules, i, args.max_results, args.num_mixins))
+            .collect::<Vec<_>>()
+        {
+            if !top
+                .iter()
+                .any(|(p, i)| *p == subresult.0 && i.effects == subresult.1.effects)
+            {
+                top.insert(subresult);
             }
-            queue.push((item, substances, eff));
         }
     }
 
@@ -157,4 +161,76 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[derive(Debug, PartialOrd, PartialEq, Ord, Eq, Clone)]
+struct SearchQueueItem {
+    drug: Drugs,
+    substances: Vec<Substance>,
+    effects: BTreeSet<Effect>,
+}
+
+fn profit(item: &SearchQueueItem, rules: &MixtureRules) -> i64 {
+    let price =
+        (base_price(item.drug) * rules.price_multiplier(item.effects.iter())).round() as i64;
+    price
+        - item
+            .substances
+            .iter()
+            .map(|s| substance_cost(*s))
+            .sum::<i64>()
+}
+
+fn apply_substance(
+    item: &SearchQueueItem,
+    substance: Substance,
+    rules: &MixtureRules,
+) -> Option<SearchQueueItem> {
+    let mut substances = item.substances.clone();
+    substances.push(substance);
+
+    let mut eff = item.effects.clone();
+    rules.apply(substance, &mut eff);
+    if item.effects == eff {
+        // Adding this does nothing, trim the search space by ignoring this option
+        return None;
+    }
+    Some(SearchQueueItem {
+        drug: item.drug,
+        substances,
+        effects: eff,
+    })
+}
+
+fn depth_first_search(
+    rules: &MixtureRules,
+    initial: SearchQueueItem,
+    max_results: usize,
+    num_mixins: usize,
+) -> Vec<(i64, SearchQueueItem)> {
+    let mut stack: Vec<_> = vec![initial];
+
+    let mut top = TopSet::new(max_results, PartialOrd::gt);
+
+    while let Some(item) = stack.pop() {
+        let profit = profit(&item, rules);
+        if !top
+            .iter()
+            .any(|(p, i): &(i64, SearchQueueItem)| *p == profit && i.effects == item.effects)
+        {
+            top.insert((profit, item.clone()));
+        }
+
+        if item.substances.len() == num_mixins {
+            // If we've already assigned TOTAL_STATIONS, then we cannot add more.
+            continue;
+        }
+        for substance in SUBSTANCES.iter().copied() {
+            if let Some(item) = apply_substance(&item, substance, rules) {
+                stack.push(item);
+            }
+        }
+    }
+
+    top.into_sorted_vec()
 }
