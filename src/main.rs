@@ -187,7 +187,7 @@ fn apply_substance(
     let mut substances = item.substances.clone();
     substances.push(substance);
 
-    let mut eff = item.effects.clone();
+    let mut eff = item.effects;
     rules.apply(substance, &mut eff);
     if item.effects == eff {
         // Adding this does nothing, trim the search space by ignoring this option
@@ -206,15 +206,17 @@ fn depth_first_search(
     max_results: usize,
     num_mixins: usize,
 ) -> Vec<(i64, SearchQueueItem)> {
-    let mut stack: Vec<_> = vec![initial];
+    let mut stack = vec![initial];
 
     let mut top = TopSet::new(max_results, PartialOrd::gt);
 
     while let Some(item) = stack.pop() {
         let profit = profit(&item, rules);
-        if !top
-            .iter()
-            .any(|(p, i): &(i64, SearchQueueItem)| *p == profit && i.effects == item.effects)
+        let improvement = top.peek().map(|(p, _)| profit > *p).unwrap_or(true);
+        if improvement
+            && !top
+                .iter()
+                .any(|(p, i): &(i64, SearchQueueItem)| *p == profit && i.effects == item.effects)
         {
             top.insert((profit, item.clone()));
         }
