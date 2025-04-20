@@ -1,12 +1,13 @@
 use crate::mixing::{parse_rules_file, Effects, MixtureRules, Substance, SUBSTANCES};
 use clap::Parser;
+use crossbeam::queue::ArrayQueue;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::cmp::min;
 use std::fmt::Display;
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
-use threadpool::ThreadPool;
 use topset::TopSet;
 
 mod mixing;
@@ -191,16 +192,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         bar.enable_steady_tick(Duration::from_millis(100));
 
-        let (tx, rx) = mpsc::channel();
-
-        let pool = ThreadPool::new(num_cpus::get());
+        let (tx, rx) = crossbeam::channel::unbounded();
+        let work_queue = Arc::new(ArrayQueue::new(precompute_queue.len()));
         for item in precompute_queue {
+            work_queue.push(item).expect("should have enough room");
+        }
+
+        let mut handles = Vec::with_capacity(num_cpus::get());
+        for _ in 0..num_cpus::get() {
+            let work_queue = work_queue.clone();
             let tx = tx.clone();
             let rules = rules.clone();
-            pool.execute(move || {
-                let res = depth_first_search(&rules, item, args.max_results, args.num_mixins);
-                tx.send(res).unwrap();
-            });
+            handles.push(thread::spawn(move || {
+                while let Some(item) = work_queue.pop() {
+                    let res =
+                        depth_first_search(&rules, item.clone(), args.max_results, args.num_mixins);
+                    tx.send(res).unwrap();
+                }
+            }));
         }
 
         drop(tx);
@@ -218,6 +227,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bar.set_message(format!("{}, {:?}", best.0, best.1));
                 }
             }
+        }
+        for handle in handles {
+            handle.join().unwrap();
         }
     }
 
