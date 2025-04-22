@@ -1,9 +1,10 @@
-use crate::mixing::{parse_rules_file, Effects, MixtureRules, Substance, SUBSTANCES};
+use crate::mixing::{parse_rules_file, SUBSTANCES};
 use clap::Parser;
 use crossbeam::queue::ArrayQueue;
 use indicatif::{ProgressBar, ProgressStyle};
+use mixing::{Drugs, WeedType};
+use search::SearchQueueItem;
 use std::cmp::min;
-use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -11,85 +12,7 @@ use std::time::Duration;
 use topset::TopSet;
 
 mod mixing;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-enum WeedType {
-    OGKush,
-    SourDiesel,
-    GreenCrack,
-    GranddaddyPurple,
-}
-
-impl Display for WeedType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            WeedType::OGKush => write!(f, "OG Kush"),
-            WeedType::SourDiesel => write!(f, "Sour Diesel"),
-            WeedType::GreenCrack => write!(f, "Green Crack"),
-            WeedType::GranddaddyPurple => write!(f, "Granddaddy Purple"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-enum Drugs {
-    Weed(WeedType),
-    Meth,
-    Cocaine,
-}
-
-impl Display for Drugs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Drugs::Weed(w) => w.fmt(f),
-            Drugs::Meth => {
-                write!(f, "Meth")
-            }
-            Drugs::Cocaine => {
-                write!(f, "Cocaine")
-            }
-        }
-    }
-}
-
-fn base_price(drug: Drugs) -> f64 {
-    match drug {
-        Drugs::Weed(_) => 35.0,
-        Drugs::Meth => 70.0,
-        Drugs::Cocaine => 150.0,
-    }
-}
-
-fn inherent_effects(drug: Drugs) -> Effects {
-    match drug {
-        Drugs::Weed(WeedType::OGKush) => Effects::Calming,
-        Drugs::Weed(WeedType::SourDiesel) => Effects::Refreshing,
-        Drugs::Weed(WeedType::GreenCrack) => Effects::Energizing,
-        Drugs::Weed(WeedType::GranddaddyPurple) => Effects::Sedating,
-        _ => Effects::empty(),
-    }
-}
-
-fn substance_cost(substance: Substance) -> i64 {
-    match substance {
-        Substance::Cuke => 2,
-        Substance::Banana => 2,
-        Substance::Paracetamol => 3,
-        Substance::Donut => 3,
-        Substance::Viagra => 4,
-        Substance::MouthWash => 4,
-        Substance::FluMedicine => 5,
-        Substance::Gasoline => 5,
-        Substance::EnergyDrink => 6,
-        Substance::MotorOil => 6,
-        Substance::MegaBean => 7,
-        Substance::Chili => 7,
-        Substance::Battery => 8,
-        Substance::Iodine => 8,
-        Substance::Addy => 9,
-        Substance::HorseSemen => 9,
-    }
-}
+mod search;
 
 #[derive(Debug, clap::Parser)]
 struct Args {
@@ -159,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|drug| SearchQueueItem {
             drug,
             substances: Vec::new(),
-            effects: inherent_effects(drug),
+            effects: mixing::inherent_effects(drug),
         })
         .collect();
 
@@ -167,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(item) = queue.pop() {
         // We will do the first N iterations and then spawn threads to handle each of the initial substances
-        let p = profit(&item, &rules);
+        let p = search::profit(&item, &rules);
         top.insert((p, item.clone()));
 
         let mut precompute_queue = vec![item];
@@ -178,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 new_queue.extend(
                     SUBSTANCES
                         .iter()
-                        .filter_map(|s| apply_substance(&item, *s, &rules)),
+                        .filter_map(|s| search::apply_substance(&item, *s, &rules)),
                 )
             }
             precompute_queue = new_queue;
@@ -205,8 +128,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let rules = rules.clone();
             handles.push(thread::spawn(move || {
                 while let Some(item) = work_queue.pop() {
-                    let res =
-                        depth_first_search(&rules, item.clone(), args.max_results, args.num_mixins);
+                    let res = search::depth_first_search(
+                        &rules,
+                        item.clone(),
+                        args.max_results,
+                        args.num_mixins,
+                    );
                     tx.send(res).unwrap();
                 }
             }));
@@ -238,77 +165,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, PartialOrd, PartialEq, Ord, Eq, Clone)]
-struct SearchQueueItem {
-    drug: Drugs,
-    substances: Vec<Substance>,
-    effects: Effects,
-}
-
-fn profit(item: &SearchQueueItem, rules: &MixtureRules) -> i64 {
-    let price = (base_price(item.drug) * rules.price_multiplier(item.effects)).round() as i64;
-    price
-        - item
-            .substances
-            .iter()
-            .map(|s| substance_cost(*s))
-            .sum::<i64>()
-}
-
-fn apply_substance(
-    item: &SearchQueueItem,
-    substance: Substance,
-    rules: &MixtureRules,
-) -> Option<SearchQueueItem> {
-    let mut substances = item.substances.clone();
-    substances.push(substance);
-
-    let mut eff = item.effects;
-    rules.apply(substance, &mut eff);
-    if item.effects == eff {
-        // Adding this does nothing, trim the search space by ignoring this option
-        return None;
-    }
-    Some(SearchQueueItem {
-        drug: item.drug,
-        substances,
-        effects: eff,
-    })
-}
-
-fn depth_first_search(
-    rules: &MixtureRules,
-    initial: SearchQueueItem,
-    max_results: usize,
-    num_mixins: usize,
-) -> Vec<(i64, SearchQueueItem)> {
-    let mut stack = vec![initial];
-
-    let mut top = TopSet::new(max_results, PartialOrd::gt);
-
-    while let Some(item) = stack.pop() {
-        let profit = profit(&item, rules);
-        let improvement = top.peek().map(|(p, _)| profit > *p).unwrap_or(true);
-        if improvement
-            && !top
-                .iter()
-                .any(|(p, i): &(i64, SearchQueueItem)| *p == profit && i.effects == item.effects)
-        {
-            top.insert((profit, item.clone()));
-        }
-
-        if item.substances.len() == num_mixins {
-            // If we've already assigned TOTAL_STATIONS, then we cannot add more.
-            continue;
-        }
-        for substance in SUBSTANCES.iter().copied() {
-            if let Some(item) = apply_substance(&item, substance, rules) {
-                stack.push(item);
-            }
-        }
-    }
-
-    top.into_sorted_vec()
 }

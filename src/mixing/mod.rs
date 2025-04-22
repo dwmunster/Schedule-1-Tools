@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -422,5 +423,55 @@ mod tests {
         assert_eq!(price, 657);
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub enum WeedType {
+    OGKush,
+    SourDiesel,
+    GreenCrack,
+    GranddaddyPurple,
+}
+
+impl Display for WeedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WeedType::OGKush => write!(f, "OG Kush"),
+            WeedType::SourDiesel => write!(f, "Sour Diesel"),
+            WeedType::GreenCrack => write!(f, "Green Crack"),
+            WeedType::GranddaddyPurple => write!(f, "Granddaddy Purple"),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
+pub enum Drugs {
+    Weed(WeedType),
+    Meth,
+    Cocaine,
+}
+
+impl Display for Drugs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Drugs::Weed(w) => w.fmt(f),
+            Drugs::Meth => {
+                write!(f, "Meth")
+            }
+            Drugs::Cocaine => {
+                write!(f, "Cocaine")
+            }
+        }
+    }
+}
+
+pub fn inherent_effects(drug: Drugs) -> Effects {
+    match drug {
+        Drugs::Weed(WeedType::OGKush) => Effects::Calming,
+        Drugs::Weed(WeedType::SourDiesel) => Effects::Refreshing,
+        Drugs::Weed(WeedType::GreenCrack) => Effects::Energizing,
+        Drugs::Weed(WeedType::GranddaddyPurple) => Effects::Sedating,
+        _ => Effects::empty(),
     }
 }
