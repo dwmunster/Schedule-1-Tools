@@ -1,7 +1,15 @@
 [package]
-name = "schedule1-game-tools"
+name = "schedule1-mixing"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+name = "schedule1"
+path = "src/lib.rs"
+
+[[bin]]
+name = "schedule1-mixing-tool"
+path = "src/bin.rs"
 
 [dependencies]
 bitflags = "2.9.0"
@@ -13,3 +21,10 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 topological-sort = "0.2.2"
 topset = "0.4.0"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "dfs"
+harness = false
