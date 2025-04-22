@@ -133,7 +133,8 @@ pub struct MixtureRules {
 }
 
 impl MixtureRules {
-    pub fn apply(&self, substance: Substance, effects: &mut Effects) {
+    pub fn apply(&self, substance: Substance, effects: Effects) -> Effects {
+        let mut effects = effects;
         let replacements = self.replacement_rules.get(&substance).unwrap();
         let inherent_effects = self
             .inherent_effects
@@ -152,6 +153,7 @@ impl MixtureRules {
         if n_effects < MAX_EFFECTS {
             effects.insert(inherent_effects);
         }
+        effects
     }
 
     pub fn price_multiplier(&self, effects: Effects) -> f64 {
@@ -340,25 +342,25 @@ mod tests {
     fn test_regression_cocaine() -> Result<(), Box<dyn Error>> {
         let rules = parse_rules_file("sch1-mix-rules.json")?;
 
-        let mut effects = Effects::empty();
+        let effects = Effects::empty();
 
         // First mix
-        rules.apply(Substance::HorseSemen, &mut effects);
+        let effects = rules.apply(Substance::HorseSemen, effects);
         assert_eq!(effects, Effects::LongFaced);
 
         // Second mix
-        rules.apply(Substance::Addy, &mut effects);
+        let effects = rules.apply(Substance::Addy, effects);
         assert_eq!(effects, Effects::Electrifying | Effects::ThoughtProvoking);
 
         // Third mix
-        rules.apply(Substance::Battery, &mut effects);
+        let effects = rules.apply(Substance::Battery, effects);
         assert_eq!(
             effects,
             Effects::Euphoric | Effects::ThoughtProvoking | Effects::BrightEyed
         );
 
         // Fourth mix
-        rules.apply(Substance::HorseSemen, &mut effects);
+        let effects = rules.apply(Substance::HorseSemen, effects);
         assert_eq!(
             effects,
             Effects::Electrifying | Effects::BrightEyed | Effects::LongFaced | Effects::Euphoric
@@ -371,32 +373,32 @@ mod tests {
     fn test_regression_cocaine2() -> Result<(), Box<dyn Error>> {
         let rules = parse_rules_file("sch1-mix-rules.json")?;
 
-        let mut effects = Effects::empty();
+        let effects = Effects::empty();
 
         // First mix
-        rules.apply(Substance::MegaBean, &mut effects);
+        let effects = rules.apply(Substance::MegaBean, effects);
         assert_eq!(effects, Effects::Foggy);
 
         // Second mix
-        rules.apply(Substance::Cuke, &mut effects);
+        let effects = rules.apply(Substance::Cuke, effects);
         assert_eq!(effects, Effects::Cyclopean | Effects::Energizing);
 
         // Third mix
-        rules.apply(Substance::Banana, &mut effects);
+        let effects = rules.apply(Substance::Banana, effects);
         assert_eq!(
             effects,
             Effects::Energizing | Effects::ThoughtProvoking | Effects::Gingeritis
         );
 
         // Fourth mix
-        rules.apply(Substance::HorseSemen, &mut effects);
+        let effects = rules.apply(Substance::HorseSemen, effects);
         assert_eq!(
             effects,
             Effects::Energizing | Effects::Electrifying | Effects::Refreshing | Effects::LongFaced
         );
 
         // Fifth mix
-        rules.apply(Substance::Iodine, &mut effects);
+        let effects = rules.apply(Substance::Iodine, effects);
         assert_eq!(
             effects,
             Effects::Energizing

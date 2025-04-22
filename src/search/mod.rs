@@ -9,35 +9,25 @@ pub struct SearchQueueItem {
     pub effects: Effects,
 }
 
-pub fn profit(item: &SearchQueueItem, rules: &MixtureRules) -> i64 {
-    let price = (base_price(item.drug) * rules.price_multiplier(item.effects)).round() as i64;
-    price
-        - item
-            .substances
-            .iter()
-            .map(|s| substance_cost(*s))
-            .sum::<i64>()
+pub fn profit<'a, I>(drug: Drugs, substances: I, effects: Effects, rules: &MixtureRules) -> i64
+where
+    I: Iterator<Item = &'a Substance>,
+{
+    let price = (base_price(drug) * rules.price_multiplier(effects)).round() as i64;
+    price - substances.map(|s| substance_cost(*s)).sum::<i64>()
 }
 
 pub fn apply_substance(
-    item: &SearchQueueItem,
+    effects: Effects,
     substance: Substance,
     rules: &MixtureRules,
-) -> Option<SearchQueueItem> {
-    let mut substances = item.substances.clone();
-    substances.push(substance);
-
-    let mut eff = item.effects;
-    rules.apply(substance, &mut eff);
-    if item.effects == eff {
+) -> Option<Effects> {
+    let new_effects = rules.apply(substance, effects);
+    if new_effects == effects {
         // Adding this does nothing, trim the search space by ignoring this option
         return None;
     }
-    Some(SearchQueueItem {
-        drug: item.drug,
-        substances,
-        effects: eff,
-    })
+    Some(new_effects)
 }
 
 pub fn depth_first_search(
@@ -51,7 +41,7 @@ pub fn depth_first_search(
     let mut top = TopSet::new(max_results, PartialOrd::gt);
 
     while let Some(item) = stack.pop() {
-        let profit = profit(&item, rules);
+        let profit = profit(item.drug, item.substances.iter(), item.effects, rules);
         let improvement = top.peek().map(|(p, _)| profit > *p).unwrap_or(true);
         if improvement
             && !top
@@ -66,8 +56,14 @@ pub fn depth_first_search(
             continue;
         }
         for substance in SUBSTANCES.iter().copied() {
-            if let Some(item) = apply_substance(&item, substance, rules) {
-                stack.push(item);
+            if let Some(eff) = apply_substance(item.effects, substance, rules) {
+                let mut substances = item.substances.clone();
+                substances.push(substance);
+                stack.push(SearchQueueItem {
+                    drug: item.drug,
+                    substances,
+                    effects: eff,
+                });
             }
         }
     }

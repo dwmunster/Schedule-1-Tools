@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(item) = queue.pop() {
         // We will do the first N iterations and then spawn threads to handle each of the initial substances
-        let p = search::profit(&item, &rules);
+        let p = search::profit(item.drug, item.substances.iter(), item.effects, &rules);
         top.insert((p, item.clone()));
 
         let mut precompute_queue = vec![item];
@@ -98,11 +98,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for _ in 0..min(args.num_mixins, args.precompute_layers) {
             let mut new_queue = Vec::with_capacity(precompute_queue.len() * SUBSTANCES.len());
             for item in precompute_queue {
-                new_queue.extend(
-                    SUBSTANCES
-                        .iter()
-                        .filter_map(|s| search::apply_substance(&item, *s, &rules)),
-                )
+                new_queue.extend(SUBSTANCES.iter().filter_map(|s| {
+                    search::apply_substance(item.effects, *s, &rules).map(|e| SearchQueueItem {
+                        drug: item.drug,
+                        substances: {
+                            let mut vec = item.substances.clone();
+                            vec.push(*s);
+                            vec
+                        },
+                        effects: e,
+                    })
+                }))
             }
             precompute_queue = new_queue;
         }
