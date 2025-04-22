@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::BufReader;
@@ -51,6 +51,7 @@ bitflags! {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
+#[repr(usize)]
 pub enum Substance {
     Cuke,
     FluMedicine,
@@ -127,20 +128,16 @@ struct RulesFile {
 }
 
 pub struct MixtureRules {
-    replacement_rules: BTreeMap<Substance, Vec<Rule>>,
-    inherent_effects: BTreeMap<Substance, Effects>,
+    replacement_rules: [Vec<Rule>; SUBSTANCES.len()],
+    inherent_effects: [Effects; SUBSTANCES.len()],
     price_mults: [f64; NUM_EFFECTS],
 }
 
 impl MixtureRules {
     pub fn apply(&self, substance: Substance, effects: Effects) -> Effects {
         let mut effects = effects;
-        let replacements = self.replacement_rules.get(&substance).unwrap();
-        let inherent_effects = self
-            .inherent_effects
-            .get(&substance)
-            .copied()
-            .unwrap_or(Effects::empty());
+        let replacements = &self.replacement_rules[substance as usize];
+        let inherent_effects = self.inherent_effects[substance as usize];
 
         for rule in replacements {
             if effects.contains(rule.if_present) && !effects.contains(rule.if_not_present) {
@@ -184,7 +181,7 @@ pub fn parse_rules_file<P: AsRef<Path>>(
     let rules_file: RulesFile = serde_json::from_reader(reader)?;
 
     // Convert to our internal representation
-    let mut replacement_rules = BTreeMap::new();
+    let mut replacement_rules = [const { Vec::new() }; SUBSTANCES.len()];
 
     for rule_json in rules_file.rules {
         let substance = match string_to_substance(&rule_json.requires_substance) {
@@ -221,15 +218,12 @@ pub fn parse_rules_file<P: AsRef<Path>>(
         };
 
         // Add to our HashMap
-        replacement_rules
-            .entry(substance)
-            .or_insert_with(Vec::new)
-            .push(rule);
+        replacement_rules[substance as usize].push(rule);
     }
 
     // Topo sort the replacement rules
     // if {A -> B, B -> C} is applied to {A, B}, should end up with {B, C}
-    for rules in replacement_rules.values_mut() {
+    for rules in replacement_rules.iter_mut() {
         let mut ts = TopologicalSort::<Effects>::new();
         for rule in rules.iter() {
             ts.add_dependency(rule.if_not_present, rule.if_present);
@@ -244,7 +238,7 @@ pub fn parse_rules_file<P: AsRef<Path>>(
     }
 
     // Convert inherent effects
-    let mut inherent_effects = BTreeMap::new();
+    let mut inherent_effects = [Effects::empty(); SUBSTANCES.len()];
     for effect_json in &rules_file.effects {
         let substance = string_to_substance(&effect_json.substance).unwrap();
         let effects = effect_json
@@ -252,7 +246,7 @@ pub fn parse_rules_file<P: AsRef<Path>>(
             .iter()
             .map(|s| string_to_effect(s))
             .fold(Effects::empty(), |a, b| a | b);
-        inherent_effects.insert(substance, effects);
+        inherent_effects[substance as usize] = effects;
     }
 
     // Convert effect price mapping
