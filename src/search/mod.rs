@@ -1,5 +1,7 @@
 use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
+use lockfree_object_pool::{LinearObjectPool, LinearReusable};
+use std::sync::Arc;
 use topset::TopSet;
 
 #[derive(Debug, PartialOrd, PartialEq, Ord, Eq, Clone)]
@@ -7,6 +9,44 @@ pub struct SearchQueueItem {
     pub drug: Drugs,
     pub substances: Vec<Substance>,
     pub effects: Effects,
+}
+
+type InternalVec<'p> = LinearReusable<'p, Vec<Substance>>;
+type InternalPool = Arc<LinearObjectPool<Vec<Substance>>>;
+
+fn clone_with_pool<'p>(v: &InternalVec, pool: &'p InternalPool) -> InternalVec<'p> {
+    let mut s = pool.pull();
+    s.clone_from(v);
+    s
+}
+
+struct InternalItem<'p> {
+    drug: Drugs,
+    substances: InternalVec<'p>,
+    effects: Effects,
+}
+
+impl<'p> InternalItem<'p> {
+    fn from_item(
+        item: &SearchQueueItem,
+        pool: &'p Arc<LinearObjectPool<Vec<Substance>>>,
+    ) -> InternalItem<'p> {
+        let mut substances = pool.pull();
+        substances.clone_from(&item.substances);
+        Self {
+            drug: item.drug,
+            substances,
+            effects: item.effects,
+        }
+    }
+
+    fn to_item(&self) -> SearchQueueItem {
+        SearchQueueItem {
+            drug: self.drug,
+            substances: self.substances.clone(),
+            effects: self.effects,
+        }
+    }
 }
 
 pub fn profit<'a, I>(drug: Drugs, substances: I, effects: Effects, rules: &MixtureRules) -> i64
@@ -36,7 +76,12 @@ pub fn depth_first_search(
     max_results: usize,
     num_mixins: usize,
 ) -> Vec<(i64, SearchQueueItem)> {
-    let mut stack = vec![initial];
+    let pool = Arc::new(LinearObjectPool::new(
+        move || Vec::with_capacity(num_mixins),
+        |v| v.clear(),
+    ));
+
+    let mut stack = vec![InternalItem::from_item(&initial, &pool)];
 
     let mut top = TopSet::new(max_results, PartialOrd::gt);
 
@@ -48,7 +93,7 @@ pub fn depth_first_search(
                 .iter()
                 .any(|(p, i): &(i64, SearchQueueItem)| *p == profit && i.effects == item.effects)
         {
-            top.insert((profit, item.clone()));
+            top.insert((profit, item.to_item()));
         }
 
         if item.substances.len() == num_mixins {
@@ -57,9 +102,9 @@ pub fn depth_first_search(
         }
         for substance in SUBSTANCES.iter().copied() {
             if let Some(eff) = apply_substance(item.effects, substance, rules) {
-                let mut substances = item.substances.clone();
+                let mut substances = clone_with_pool(&item.substances, &pool);
                 substances.push(substance);
-                stack.push(SearchQueueItem {
+                stack.push(InternalItem {
                     drug: item.drug,
                     substances,
                     effects: eff,
