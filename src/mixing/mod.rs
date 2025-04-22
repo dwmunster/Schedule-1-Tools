@@ -160,9 +160,12 @@ impl MixtureRules {
         let base = 1.0;
         let mut multiplier = 0.;
 
-        for effect in effects {
-            let idx = effect.bits().ilog2();
-            multiplier += self.price_mults[idx as usize];
+        // auto vectorization go brrr
+        let e = effects.bits();
+        for i in 0..NUM_EFFECTS {
+            if e & (1 << i) != 0 {
+                multiplier += self.price_mults[i];
+            }
         }
 
         base + multiplier
