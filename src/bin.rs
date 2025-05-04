@@ -48,6 +48,9 @@ struct Args {
 
     #[arg(long, default_value_t = 2)]
     precompute_layers: usize,
+
+    #[arg(long, default_value_t = 0.0)]
+    markup: f64,
 }
 
 // Example main function to demonstrate usage
@@ -87,10 +90,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
 
     let mut top = TopSet::new(args.max_results, PartialOrd::gt);
+    let net_markup = 1.0 + args.markup;
 
     while let Some(item) = queue.pop() {
         // We will do the first N iterations and then spawn threads to handle each of the initial substances
-        let p = search::profit(item.drug, item.substances.iter(), item.effects, &rules);
+        let base = search::base_price(item.drug) * net_markup;
+        let p = search::profit(base, item.substances.iter(), item.effects, &rules);
         top.insert((p, item.clone()));
 
         let mut precompute_queue = vec![item];
@@ -139,6 +144,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         item.clone(),
                         args.max_results,
                         args.num_mixins,
+                        args.markup,
                     );
                     tx.send(res).unwrap();
                 }

@@ -49,11 +49,11 @@ impl<'p> InternalItem<'p> {
     }
 }
 
-pub fn profit<'a, I>(drug: Drugs, substances: I, effects: Effects, rules: &MixtureRules) -> i64
+pub fn profit<'a, I>(base_price: f64, substances: I, effects: Effects, rules: &MixtureRules) -> i64
 where
     I: Iterator<Item = &'a Substance>,
 {
-    let price = (base_price(drug) * rules.price_multiplier(effects)).round() as i64;
+    let price = (base_price * rules.price_multiplier(effects)).round() as i64;
     price - substances.map(|s| substance_cost(*s)).sum::<i64>()
 }
 
@@ -75,7 +75,10 @@ pub fn depth_first_search(
     initial: SearchQueueItem,
     max_results: usize,
     num_mixins: usize,
+    markup: f64,
 ) -> Vec<(i64, SearchQueueItem)> {
+    let net_markup = 1.0 + markup;
+
     let pool = Arc::new(LinearObjectPool::new(
         move || Vec::with_capacity(num_mixins),
         |v| v.clear(),
@@ -86,7 +89,8 @@ pub fn depth_first_search(
     let mut top = TopSet::new(max_results, PartialOrd::gt);
 
     while let Some(item) = stack.pop() {
-        let profit = profit(item.drug, item.substances.iter(), item.effects, rules);
+        let base = base_price(item.drug) * net_markup;
+        let profit = profit(base, item.substances.iter(), item.effects, rules);
         let improvement = top.peek().map(|(p, _)| profit > *p).unwrap_or(true);
         if improvement
             && !top
@@ -116,7 +120,7 @@ pub fn depth_first_search(
     top.into_sorted_vec()
 }
 
-fn base_price(drug: Drugs) -> f64 {
+pub fn base_price(drug: Drugs) -> f64 {
     match drug {
         Drugs::Weed(_) => 35.0,
         Drugs::Meth => 70.0,
