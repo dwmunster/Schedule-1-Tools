@@ -54,6 +54,9 @@ struct Args {
 
     #[arg(long, default_value_t = false)]
     json: bool,
+
+    #[arg(long, default_value_t = 999)]
+    max_price: i64,
 }
 
 // Example main function to demonstrate usage
@@ -98,7 +101,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(item) = queue.pop() {
         // We will do the first N iterations and then spawn threads to handle each of the initial substances
         let base = search::base_price(item.drug) * net_markup;
-        let p = search::profit(base, item.substances.iter(), item.effects, &rules);
+        let p = search::profit(
+            base,
+            item.substances.iter(),
+            item.effects,
+            &rules,
+            args.max_price,
+        );
         top.insert((p, item.clone()));
 
         let mut precompute_queue = vec![item];
@@ -148,6 +157,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         args.max_results,
                         args.num_mixins,
                         args.markup,
+                        args.max_price,
                     );
                     tx.send(res).unwrap();
                 }
@@ -158,16 +168,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         for v in rx {
             bar.inc(1);
             for subresult in v {
-                if !top
-                    .iter()
-                    .any(|(p, i)| *p == subresult.0 && i.effects == subresult.1.effects)
-                {
-                    top.insert(subresult);
-                    let Some(best) = top.iter().max() else {
-                        continue;
-                    };
-                    bar.set_message(format!("{}, {:?}", best.0, best.1));
+                if top.peek().is_some_and(|(p, _)| *p >= subresult.0) {
+                    // No improvements, so continue
+                    continue;
                 }
+                let mut drain = false;
+                if let Some((p, _)) = top.iter().find(|(_, i)| i.effects == subresult.1.effects) {
+                    if *p >= subresult.0 {
+                        // Worse version of an existing recipe, continue
+                        continue;
+                    }
+                    // Otherwise, take out the old one.
+                    drain = true;
+                }
+                // This, in theory, should be done in the if let block above. However, the
+                // top.iter().find(...) holds onto a reference to `top`, not allowing us to drain it.
+                if drain {
+                    let items = top
+                        .drain()
+                        .filter(|(_, i)| i.effects != subresult.1.effects);
+                    let mut top2 = TopSet::new(args.max_results, PartialOrd::gt);
+                    for item in items {
+                        top2.insert(item);
+                    }
+                    top = top2;
+                }
+                top.insert(subresult);
+                let Some(best) = top.iter().max() else {
+                    continue;
+                };
+                bar.set_message(format!("{}, {:?}", best.0, best.1));
             }
         }
         for handle in handles {
@@ -176,10 +206,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for item in top.into_sorted_vec().iter().rev() {
+        let val = (
+            &item.0,
+            f64::min(
+                rules.price_multiplier(item.1.effects)
+                    * search::base_price(item.1.drug)
+                    * net_markup,
+                args.max_price as f64,
+            )
+            .round() as i64,
+            &item.1,
+        );
         if args.json {
-            println!("{},", serde_json::to_string(&item).unwrap());
+            println!("{},", serde_json::to_string(&val).unwrap());
         } else {
-            println!("{:#?}", item);
+            println!("{:#?}", &val);
         }
     }
 

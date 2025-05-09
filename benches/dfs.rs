@@ -13,7 +13,7 @@ pub fn depth_first_search(c: &mut Criterion) {
     };
 
     c.bench_function("depth_first_search", |b| {
-        b.iter(|| search::depth_first_search(&rules, initial.clone(), 5, 6, 1.0))
+        b.iter(|| search::depth_first_search(&rules, initial.clone(), 5, 6, 1.0, 999))
     });
 }
 

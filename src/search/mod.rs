@@ -2,6 +2,7 @@ use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
 use lockfree_object_pool::{LinearObjectPool, LinearReusable};
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
 use std::sync::Arc;
 use topset::TopSet;
 
@@ -50,11 +51,20 @@ impl<'p> InternalItem<'p> {
     }
 }
 
-pub fn profit<'a, I>(base_price: f64, substances: I, effects: Effects, rules: &MixtureRules) -> i64
+pub fn profit<'a, I>(
+    base_price: f64,
+    substances: I,
+    effects: Effects,
+    rules: &MixtureRules,
+    max_price: i64,
+) -> i64
 where
     I: Iterator<Item = &'a Substance>,
 {
-    let price = (base_price * rules.price_multiplier(effects)).round() as i64;
+    let price = min(
+        (base_price * rules.price_multiplier(effects)).round() as i64,
+        max_price,
+    );
     price - substances.map(|s| substance_cost(*s)).sum::<i64>()
 }
 
@@ -77,6 +87,7 @@ pub fn depth_first_search(
     max_results: usize,
     num_mixins: usize,
     markup: f64,
+    max_price: i64,
 ) -> Vec<(i64, SearchQueueItem)> {
     let net_markup = 1.0 + markup;
 
@@ -91,7 +102,7 @@ pub fn depth_first_search(
 
     while let Some(item) = stack.pop() {
         let base = base_price(item.drug) * net_markup;
-        let profit = profit(base, item.substances.iter(), item.effects, rules);
+        let profit = profit(base, item.substances.iter(), item.effects, rules, max_price);
         let improvement = top.peek().map(|(p, _)| profit > *p).unwrap_or(true);
         if improvement
             && !top
