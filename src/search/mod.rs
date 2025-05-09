@@ -29,6 +29,13 @@ struct InternalItem<'p> {
 }
 
 impl<'p> InternalItem<'p> {
+    // fn clone_with_pool(&self, pool: &'p InternalPool) -> Self {
+    //     InternalItem {
+    //         drug: self.drug,
+    //         substances: clone_with_pool(&self.substances, pool),
+    //         effects: self.effects,
+    //     }
+    // }
     fn from_item(
         item: &SearchQueueItem,
         pool: &'p Arc<LinearObjectPool<Vec<Substance>>>,
@@ -103,12 +110,31 @@ pub fn depth_first_search(
     while let Some(item) = stack.pop() {
         let base = base_price(item.drug) * net_markup;
         let profit = profit(base, item.substances.iter(), item.effects, rules, max_price);
-        let improvement = top.peek().map(|(p, _)| profit > *p).unwrap_or(true);
-        if improvement
-            && !top
-                .iter()
-                .any(|(p, i): &(i64, SearchQueueItem)| *p == profit && i.effects == item.effects)
-        {
+        let mut improvement = top
+            .peek()
+            .is_none_or(|(p, _): &(i64, SearchQueueItem)| *p < profit);
+
+        let mut drain = false;
+        if let Some((p, _)) = top.iter().find(|(_, i)| i.effects == item.effects) {
+            if *p >= profit {
+                // Worse version of an existing recipe, continue
+                improvement = false;
+            } else {
+                // Otherwise, take out the old one.
+                drain = true;
+            }
+        }
+        // This, in theory, should be done in the if let block above. However, the
+        // top.iter().find(...) holds onto a reference to `top`, not allowing us to drain it.
+        if drain {
+            let items = top.drain().filter(|(_, i)| i.effects != item.effects);
+            let mut top2 = TopSet::new(max_results, PartialOrd::gt);
+            for item in items {
+                top2.insert(item);
+            }
+            top = top2;
+        }
+        if improvement {
             top.insert((profit, item.to_item()));
         }
 
