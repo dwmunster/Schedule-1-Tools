@@ -51,6 +51,9 @@ struct Args {
 
     #[arg(long, default_value_t = 0.0)]
     markup: f64,
+
+    #[arg(long, default_value_t = false)]
+    json: bool,
 }
 
 // Example main function to demonstrate usage
@@ -173,7 +176,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for item in top.into_sorted_vec().iter().rev() {
-        println!("{:#?}", item);
+        if args.json {
+            println!("{},", serde_json::to_string(&item).unwrap());
+        } else {
+            println!("{:#?}", item);
+        }
     }
 
     Ok(())

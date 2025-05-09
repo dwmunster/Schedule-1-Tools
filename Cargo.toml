@@ -12,7 +12,7 @@ name = "schedule1-mixing-tool"
 path = "src/bin.rs"
 
 [dependencies]
-bitflags = "2.9.0"
+bitflags = { features = ["serde"], version = "2.9.0" }
 clap = { version = "4.5.36", features = ["derive"] }
 crossbeam = "0.8.4"
 indicatif = { version = "0.17.11", features = ["rayon"] }

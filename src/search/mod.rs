@@ -1,10 +1,11 @@
 use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
 use lockfree_object_pool::{LinearObjectPool, LinearReusable};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use topset::TopSet;
 
-#[derive(Debug, PartialOrd, PartialEq, Ord, Eq, Clone)]
+#[derive(Debug, PartialOrd, PartialEq, Ord, Eq, Clone, Serialize, Deserialize)]
 pub struct SearchQueueItem {
     pub drug: Drugs,
     pub substances: Vec<Substance>,
