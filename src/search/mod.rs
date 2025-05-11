@@ -3,24 +3,24 @@ pub mod pareto;
 
 use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
+use crate::packing::PackedValues;
 use crate::search::pareto::ParetoFront;
 use dashmap::DashMap;
-use lockfree_object_pool::{LinearObjectPool, LinearReusable};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::sync::Arc;
 use topset::TopSet;
 
-#[derive(Debug, PartialOrd, PartialEq, Ord, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Serialize, Deserialize)]
 pub struct SearchQueueItem {
     pub drug: Drugs,
-    pub substances: Vec<Substance>,
+    pub substances: PackedValues<Substance, 4>,
     pub effects: Effects,
 }
 
 impl SearchQueueItem {
     pub fn cost(&self) -> i64 {
-        self.substances.iter().map(|s| substance_cost(*s)).sum()
+        self.substances.iter().map(substance_cost).sum()
     }
 
     pub fn num_mixins(&self) -> usize {
@@ -28,52 +28,7 @@ impl SearchQueueItem {
     }
 }
 
-type InternalVec<'p> = LinearReusable<'p, Vec<Substance>>;
-type InternalPool = Arc<LinearObjectPool<Vec<Substance>>>;
-
-fn clone_with_pool<'p>(v: &InternalVec, pool: &'p InternalPool) -> InternalVec<'p> {
-    let mut s = pool.pull();
-    s.clone_from(v);
-    s
-}
-
-struct InternalItem<'p> {
-    drug: Drugs,
-    substances: InternalVec<'p>,
-    effects: Effects,
-}
-
-impl<'p> InternalItem<'p> {
-    // fn clone_with_pool(&self, pool: &'p InternalPool) -> Self {
-    //     InternalItem {
-    //         drug: self.drug,
-    //         substances: clone_with_pool(&self.substances, pool),
-    //         effects: self.effects,
-    //     }
-    // }
-    fn from_item(
-        item: &SearchQueueItem,
-        pool: &'p Arc<LinearObjectPool<Vec<Substance>>>,
-    ) -> InternalItem<'p> {
-        let mut substances = pool.pull();
-        substances.clone_from(&item.substances);
-        Self {
-            drug: item.drug,
-            substances,
-            effects: item.effects,
-        }
-    }
-
-    fn to_item(&self) -> SearchQueueItem {
-        SearchQueueItem {
-            drug: self.drug,
-            substances: self.substances.clone(),
-            effects: self.effects,
-        }
-    }
-}
-
-pub fn profit<'a, I>(
+pub fn profit<I>(
     base_price: f64,
     substances: I,
     effects: Effects,
@@ -81,13 +36,13 @@ pub fn profit<'a, I>(
     max_price: i64,
 ) -> i64
 where
-    I: Iterator<Item = &'a Substance>,
+    I: Iterator<Item = Substance>,
 {
     let price = min(
         (base_price * rules.price_multiplier(effects)).round() as i64,
         max_price,
     );
-    price - substances.map(|s| substance_cost(*s)).sum::<i64>()
+    price - substances.map(substance_cost).sum::<i64>()
 }
 
 pub fn apply_substance(
@@ -113,12 +68,7 @@ pub fn depth_first_search(
 ) -> Vec<(i64, SearchQueueItem)> {
     let net_markup = 1.0 + markup;
 
-    let pool = Arc::new(LinearObjectPool::new(
-        move || Vec::with_capacity(num_mixins),
-        |v| v.clear(),
-    ));
-
-    let mut stack = vec![InternalItem::from_item(&initial, &pool)];
+    let mut stack = vec![initial];
 
     let mut top = TopSet::new(max_results, PartialOrd::gt);
 
@@ -150,7 +100,7 @@ pub fn depth_first_search(
             top = top2;
         }
         if improvement {
-            top.insert((profit, item.to_item()));
+            top.insert((profit, item));
         }
 
         if item.substances.len() == num_mixins {
@@ -159,9 +109,11 @@ pub fn depth_first_search(
         }
         for substance in SUBSTANCES.iter().copied() {
             if let Some(eff) = apply_substance(item.effects, substance, rules) {
-                let mut substances = clone_with_pool(&item.substances, &pool);
-                substances.push(substance);
-                stack.push(InternalItem {
+                let mut substances = item.substances;
+                substances
+                    .push(substance)
+                    .expect("should have sufficient room");
+                stack.push(SearchQueueItem {
                     drug: item.drug,
                     substances,
                     effects: eff,
@@ -184,16 +136,11 @@ pub fn depth_first_search_pareto<F1, F2, F3>(
     F2: Fn(&SearchQueueItem) -> usize,
     F3: Fn() -> ParetoFront<SearchQueueItem, i64, usize, F1, F2>,
 {
-    let pool = Arc::new(LinearObjectPool::new(
-        move || Vec::with_capacity(num_mixins),
-        |v| v.clear(),
-    ));
-
-    let mut stack = vec![InternalItem::from_item(&initial, &pool)];
+    let mut stack = vec![initial];
 
     while let Some(item) = stack.pop() {
         let mut f = fronts.entry(item.effects).or_insert_with(&new_front);
-        if !f.value_mut().add(item.to_item()) {
+        if !f.value_mut().add(item) {
             // This item does not lead to a possible improvement, prune.
             continue;
         }
@@ -204,9 +151,11 @@ pub fn depth_first_search_pareto<F1, F2, F3>(
         }
         for substance in SUBSTANCES.iter().copied() {
             if let Some(eff) = apply_substance(item.effects, substance, rules) {
-                let mut substances = clone_with_pool(&item.substances, &pool);
-                substances.push(substance);
-                stack.push(InternalItem {
+                let mut substances = item.substances;
+                substances
+                    .push(substance)
+                    .expect("should have sufficient room");
+                stack.push(SearchQueueItem {
                     drug: item.drug,
                     substances,
                     effects: eff,

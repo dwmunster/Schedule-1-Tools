@@ -1,4 +1,5 @@
 use crate::mixing::{parse_rules_file, MixtureRules, SUBSTANCES};
+use crate::packing::PackedValues;
 use crate::search::pareto::ParetoFront;
 use crate::search::{base_price, profit};
 use clap::Parser;
@@ -8,7 +9,6 @@ use indicatif::{ProgressBar, ProgressStyle};
 use mixing::{Drugs, WeedType};
 use search::SearchQueueItem;
 use std::cmp::min;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -16,6 +16,8 @@ use std::time::Duration;
 use topset::TopSet;
 
 mod mixing;
+#[allow(dead_code)]
+mod packing;
 mod search;
 
 #[derive(Debug, clap::Parser)]
@@ -66,7 +68,6 @@ struct Args {
     pareto: bool,
 }
 
-// Example main function to demonstrate usage
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
@@ -97,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into_iter()
         .map(|drug| SearchQueueItem {
             drug,
-            substances: Vec::new(),
+            substances: PackedValues::new(),
             effects: mixing::inherent_effects(drug),
         })
         .collect();
@@ -115,7 +116,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 || ParetoFront::new(SearchQueueItem::cost, SearchQueueItem::num_mixins),
             );
         }
-        let mut hist: HashMap<usize, usize> = HashMap::new();
         let mut top = TopSet::new(args.max_results, PartialOrd::gt);
         for (effects, f) in Arc::into_inner(fronts).unwrap() {
             let min = f.min_objective_1().unwrap();
@@ -127,12 +127,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &rules,
                     999,
                 ),
-                min.data.clone(),
+                min.data,
             ));
-            *hist.entry(f.len()).or_default() += 1;
-        }
-        for (n, m) in hist {
-            println!("{}: {}", n, m);
         }
         top.into_sorted_vec()
     } else {
@@ -151,9 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let val = (
             &item.0,
             f64::min(
-                rules.price_multiplier(item.1.effects)
-                    * search::base_price(item.1.drug)
-                    * net_markup,
+                rules.price_multiplier(item.1.effects) * base_price(item.1.drug) * net_markup,
                 args.max_price as f64,
             )
             .round() as i64,
@@ -182,15 +176,9 @@ fn parallel_brute_dfs(
     let net_markup = 1.0 + markup;
     while let Some(item) = queue.pop() {
         // We will do the first N iterations and then spawn threads to handle each of the initial substances
-        let base = search::base_price(item.drug) * net_markup;
-        let p = search::profit(
-            base,
-            item.substances.iter(),
-            item.effects,
-            &rules,
-            max_price,
-        );
-        top.insert((p, item.clone()));
+        let base = base_price(item.drug) * net_markup;
+        let p = profit(base, item.substances.iter(), item.effects, rules, max_price);
+        top.insert((p, item));
 
         let mut precompute_queue = vec![item];
 
@@ -198,11 +186,11 @@ fn parallel_brute_dfs(
             let mut new_queue = Vec::with_capacity(precompute_queue.len() * SUBSTANCES.len());
             for item in precompute_queue {
                 new_queue.extend(SUBSTANCES.iter().filter_map(|s| {
-                    search::apply_substance(item.effects, *s, &rules).map(|e| SearchQueueItem {
+                    search::apply_substance(item.effects, *s, rules).map(|e| SearchQueueItem {
                         drug: item.drug,
                         substances: {
-                            let mut vec = item.substances.clone();
-                            vec.push(*s);
+                            let mut vec = item.substances;
+                            vec.push(*s).expect("should have room");
                             vec
                         },
                         effects: e,
@@ -235,7 +223,7 @@ fn parallel_brute_dfs(
                 while let Some(item) = work_queue.pop() {
                     let res = search::depth_first_search(
                         &rules,
-                        item.clone(),
+                        item,
                         max_results,
                         num_mixins,
                         markup,

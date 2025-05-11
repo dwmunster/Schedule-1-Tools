@@ -94,7 +94,7 @@ where
     }
 
     /// Add an item to the Pareto front if it's not dominated by any existing item.
-    /// Also remove any existing items that are dominated by this new item.
+    /// Also, remove any existing items that are dominated by this new item.
     pub fn add(&mut self, data: T) -> bool {
         let objective1 = (self.key_fn1)(&data);
         let objective2 = (self.key_fn2)(&data);
@@ -111,7 +111,7 @@ where
         let mut dominated_indices = Vec::new();
 
         // Check if the new item is dominated by any existing item and record any existing items
-        // dominated by new item
+        // dominated by the new item
         for (idx, item) in self.items.iter().enumerate() {
             match item.compare(&new_item) {
                 DominationResult::FirstDominates | DominationResult::Equal => {
@@ -150,7 +150,7 @@ where
         self.items.is_empty()
     }
 
-    /// Sort the Pareto front by cost (primary) and then by vector length (secondary)
+    /// Sort the Pareto front by objective 1 (primary) and then by objective 2 (secondary)
     pub fn sort(&mut self) {
         self.items
             .sort_by(|a, b| match a.objective1.cmp(&b.objective1) {
@@ -159,12 +159,12 @@ where
             });
     }
 
-    /// Find the item with the minimum cost
+    /// Find the item with the minimum primary objective
     pub fn min_objective_1(&self) -> Option<&ParetoItem<T, K1, K2>> {
         self.items.iter().min_by_key(|item| item.objective1)
     }
 
-    /// Find the item with the minimum vector length
+    /// Find the item with the minimum secondary objective
     pub fn min_objective_2(&self) -> Option<&ParetoItem<T, K1, K2>> {
         self.items.iter().min_by_key(|item| item.objective2)
     }

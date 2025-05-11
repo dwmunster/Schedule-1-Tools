@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use dashmap::DashMap;
 use schedule1::mixing::{parse_rules_file, Drugs, Effects};
+use schedule1::packing::PackedValues;
 use schedule1::search;
 use schedule1::search::pareto::ParetoFront;
 use schedule1::search::{base_price, profit, substance_cost, SearchQueueItem};
@@ -12,12 +13,12 @@ pub fn depth_first_search(c: &mut Criterion) {
     let rules = parse_rules_file(PathBuf::from("sch1-mix-rules.json")).expect("must parse rules");
     let initial = SearchQueueItem {
         drug: Drugs::Cocaine,
-        substances: vec![],
+        substances: PackedValues::new(),
         effects: Effects::empty(),
     };
 
     c.bench_function("depth_first_search", |b| {
-        b.iter(|| search::depth_first_search(&rules, initial.clone(), 5, 6, 1.0, 999))
+        b.iter(|| search::depth_first_search(&rules, initial, 5, 6, 1.0, 999))
     });
 }
 
@@ -25,20 +26,17 @@ pub fn pareto(c: &mut Criterion) {
     let rules = parse_rules_file(PathBuf::from("sch1-mix-rules.json")).expect("must parse rules");
     let initial = SearchQueueItem {
         drug: Drugs::Cocaine,
-        substances: vec![],
+        substances: PackedValues::new(),
         effects: Effects::empty(),
     };
 
     c.bench_function("pareto", |b| {
         b.iter(|| {
             let front = Arc::new(DashMap::new());
-            search::depth_first_search_pareto(&rules, initial.clone(), 5, front.clone(), || {
+            search::depth_first_search_pareto(&rules, initial, 5, front.clone(), || {
                 ParetoFront::new(
                     |item: &SearchQueueItem| {
-                        item.substances
-                            .iter()
-                            .map(|s| substance_cost(*s))
-                            .sum::<i64>()
+                        item.substances.iter().map(substance_cost).sum::<i64>()
                     },
                     |item| item.substances.len(),
                 )
@@ -55,7 +53,7 @@ pub fn pareto(c: &mut Criterion) {
                         &rules,
                         999,
                     ),
-                    min.data.clone(),
+                    min.data,
                 ));
             }
         })

@@ -1,3 +1,4 @@
+use crate::packing::Packable;
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -69,6 +70,42 @@ pub enum Substance {
     MegaBean,
     Addy,
     Battery,
+}
+
+impl From<u8> for Substance {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Substance::Cuke,
+            1 => Substance::FluMedicine,
+            2 => Substance::Gasoline,
+            3 => Substance::Donut,
+            4 => Substance::EnergyDrink,
+            5 => Substance::MouthWash,
+            6 => Substance::MotorOil,
+            7 => Substance::Banana,
+            8 => Substance::Chili,
+            9 => Substance::Iodine,
+            10 => Substance::Paracetamol,
+            11 => Substance::Viagra,
+            12 => Substance::HorseSemen,
+            13 => Substance::MegaBean,
+            14 => Substance::Addy,
+            15 => Substance::Battery,
+            _ => panic!("substance index out of bounds"),
+        }
+    }
+}
+
+impl From<Substance> for u8 {
+    fn from(value: Substance) -> u8 {
+        value as u8
+    }
+}
+
+impl Packable for Substance {
+    fn max_value() -> u8 {
+        16 // 2^4 = 16 possible values
+    }
 }
 
 pub const SUBSTANCES: &[Substance] = &[
