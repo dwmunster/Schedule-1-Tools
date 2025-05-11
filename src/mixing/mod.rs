@@ -51,7 +51,7 @@ bitflags! {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
-#[repr(usize)]
+#[repr(u8)]
 pub enum Substance {
     Cuke,
     FluMedicine,
