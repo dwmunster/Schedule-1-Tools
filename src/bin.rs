@@ -1,10 +1,14 @@
-use crate::mixing::{parse_rules_file, SUBSTANCES};
+use crate::mixing::{parse_rules_file, MixtureRules, SUBSTANCES};
+use crate::search::pareto::ParetoFront;
+use crate::search::{base_price, profit};
 use clap::Parser;
 use crossbeam::queue::ArrayQueue;
+use dashmap::DashMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use mixing::{Drugs, WeedType};
 use search::SearchQueueItem;
 use std::cmp::min;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -57,6 +61,9 @@ struct Args {
 
     #[arg(long, default_value_t = 999)]
     max_price: i64,
+
+    #[arg(long, default_value_t = false)]
+    pareto: bool,
 }
 
 // Example main function to demonstrate usage
@@ -95,9 +102,84 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect();
 
-    let mut top = TopSet::new(args.max_results, PartialOrd::gt);
     let net_markup = 1.0 + args.markup;
 
+    let top = if args.pareto {
+        let fronts = Arc::new(DashMap::with_capacity(25_211_935));
+        for item in queue {
+            search::depth_first_search_pareto(
+                &rules,
+                item,
+                args.num_mixins,
+                fronts.clone(),
+                || ParetoFront::new(SearchQueueItem::cost, SearchQueueItem::num_mixins),
+            );
+        }
+        let mut hist: HashMap<usize, usize> = HashMap::new();
+        let mut top = TopSet::new(args.max_results, PartialOrd::gt);
+        for (effects, f) in Arc::into_inner(fronts).unwrap() {
+            let min = f.min_objective_1().unwrap();
+            top.insert((
+                profit(
+                    base_price(min.data.drug) * net_markup,
+                    min.data.substances.iter(),
+                    effects,
+                    &rules,
+                    999,
+                ),
+                min.data.clone(),
+            ));
+            *hist.entry(f.len()).or_default() += 1;
+        }
+        for (n, m) in hist {
+            println!("{}: {}", n, m);
+        }
+        top.into_sorted_vec()
+    } else {
+        parallel_brute_dfs(
+            &rules,
+            &mut queue,
+            args.num_mixins,
+            args.max_results,
+            args.markup,
+            args.max_price,
+            args.precompute_layers,
+        )
+    };
+
+    for item in top.iter().rev() {
+        let val = (
+            &item.0,
+            f64::min(
+                rules.price_multiplier(item.1.effects)
+                    * search::base_price(item.1.drug)
+                    * net_markup,
+                args.max_price as f64,
+            )
+            .round() as i64,
+            &item.1,
+        );
+        if args.json {
+            println!("{},", serde_json::to_string(&val).unwrap());
+        } else {
+            println!("{:#?}", &val);
+        }
+    }
+
+    Ok(())
+}
+
+fn parallel_brute_dfs(
+    rules: &Arc<MixtureRules>,
+    queue: &mut Vec<SearchQueueItem>,
+    num_mixins: usize,
+    max_results: usize,
+    markup: f64,
+    max_price: i64,
+    precompute_layers: usize,
+) -> Vec<(i64, SearchQueueItem)> {
+    let mut top = TopSet::new(max_results, PartialOrd::gt);
+    let net_markup = 1.0 + markup;
     while let Some(item) = queue.pop() {
         // We will do the first N iterations and then spawn threads to handle each of the initial substances
         let base = search::base_price(item.drug) * net_markup;
@@ -106,13 +188,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             item.substances.iter(),
             item.effects,
             &rules,
-            args.max_price,
+            max_price,
         );
         top.insert((p, item.clone()));
 
         let mut precompute_queue = vec![item];
 
-        for _ in 0..min(args.num_mixins, args.precompute_layers) {
+        for _ in 0..min(num_mixins, precompute_layers) {
             let mut new_queue = Vec::with_capacity(precompute_queue.len() * SUBSTANCES.len());
             for item in precompute_queue {
                 new_queue.extend(SUBSTANCES.iter().filter_map(|s| {
@@ -154,10 +236,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let res = search::depth_first_search(
                         &rules,
                         item.clone(),
-                        args.max_results,
-                        args.num_mixins,
-                        args.markup,
-                        args.max_price,
+                        max_results,
+                        num_mixins,
+                        markup,
+                        max_price,
                     );
                     tx.send(res).unwrap();
                 }
@@ -187,7 +269,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let items = top
                         .drain()
                         .filter(|(_, i)| i.effects != subresult.1.effects);
-                    let mut top2 = TopSet::new(args.max_results, PartialOrd::gt);
+                    let mut top2 = TopSet::new(max_results, PartialOrd::gt);
                     for item in items {
                         top2.insert(item);
                     }
@@ -204,25 +286,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle.join().unwrap();
         }
     }
-
-    for item in top.into_sorted_vec().iter().rev() {
-        let val = (
-            &item.0,
-            f64::min(
-                rules.price_multiplier(item.1.effects)
-                    * search::base_price(item.1.drug)
-                    * net_markup,
-                args.max_price as f64,
-            )
-            .round() as i64,
-            &item.1,
-        );
-        if args.json {
-            println!("{},", serde_json::to_string(&val).unwrap());
-        } else {
-            println!("{:#?}", &val);
-        }
-    }
-
-    Ok(())
+    top.into_sorted_vec()
 }

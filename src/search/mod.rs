@@ -1,5 +1,10 @@
+#[allow(dead_code)]
+pub mod pareto;
+
 use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
+use crate::search::pareto::ParetoFront;
+use dashmap::DashMap;
 use lockfree_object_pool::{LinearObjectPool, LinearReusable};
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
@@ -11,6 +16,16 @@ pub struct SearchQueueItem {
     pub drug: Drugs,
     pub substances: Vec<Substance>,
     pub effects: Effects,
+}
+
+impl SearchQueueItem {
+    pub fn cost(&self) -> i64 {
+        self.substances.iter().map(|s| substance_cost(*s)).sum()
+    }
+
+    pub fn num_mixins(&self) -> usize {
+        self.substances.len()
+    }
 }
 
 type InternalVec<'p> = LinearReusable<'p, Vec<Substance>>;
@@ -158,6 +173,49 @@ pub fn depth_first_search(
     top.into_sorted_vec()
 }
 
+pub fn depth_first_search_pareto<F1, F2, F3>(
+    rules: &MixtureRules,
+    initial: SearchQueueItem,
+    num_mixins: usize,
+    fronts: Arc<DashMap<Effects, ParetoFront<SearchQueueItem, i64, usize, F1, F2>>>,
+    new_front: F3,
+) where
+    F1: Fn(&SearchQueueItem) -> i64,
+    F2: Fn(&SearchQueueItem) -> usize,
+    F3: Fn() -> ParetoFront<SearchQueueItem, i64, usize, F1, F2>,
+{
+    let pool = Arc::new(LinearObjectPool::new(
+        move || Vec::with_capacity(num_mixins),
+        |v| v.clear(),
+    ));
+
+    let mut stack = vec![InternalItem::from_item(&initial, &pool)];
+
+    while let Some(item) = stack.pop() {
+        let mut f = fronts.entry(item.effects).or_insert_with(&new_front);
+        if !f.value_mut().add(item.to_item()) {
+            // This item does not lead to a possible improvement, prune.
+            continue;
+        }
+
+        if item.substances.len() == num_mixins {
+            // If we've already assigned TOTAL_STATIONS, then we cannot add more.
+            continue;
+        }
+        for substance in SUBSTANCES.iter().copied() {
+            if let Some(eff) = apply_substance(item.effects, substance, rules) {
+                let mut substances = clone_with_pool(&item.substances, &pool);
+                substances.push(substance);
+                stack.push(InternalItem {
+                    drug: item.drug,
+                    substances,
+                    effects: eff,
+                });
+            }
+        }
+    }
+}
+
 pub fn base_price(drug: Drugs) -> f64 {
     match drug {
         Drugs::Weed(_) => 35.0,
@@ -166,7 +224,7 @@ pub fn base_price(drug: Drugs) -> f64 {
     }
 }
 
-fn substance_cost(substance: Substance) -> i64 {
+pub fn substance_cost(substance: Substance) -> i64 {
     match substance {
         Substance::Cuke => 2,
         Substance::Banana => 2,
