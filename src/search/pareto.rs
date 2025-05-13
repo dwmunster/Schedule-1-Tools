@@ -1,4 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::fmt::Debug;
 
 /// Represents the possible domination relationships between two items.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -15,7 +17,7 @@ enum DominationResult {
 
 /// A generic item that can be part of a Pareto front.
 /// It stores the original data and the computed objective values.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParetoItem<T, K1, K2>
 where
     K1: Ord + Copy,
@@ -64,7 +66,7 @@ where
 }
 
 /// A Pareto front that maintains a set of non-dominated items using key functions.
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct ParetoFront<T, K1, K2, F1, F2>
 where
     K1: Ord + Copy,
@@ -72,9 +74,24 @@ where
     F1: Fn(&T) -> K1,
     F2: Fn(&T) -> K2,
 {
-    items: Vec<ParetoItem<T, K1, K2>>,
+    pub(crate) items: Vec<ParetoItem<T, K1, K2>>,
     key_fn1: F1,
     key_fn2: F2,
+}
+
+impl<T, K1, K2, F1, F2> Debug for ParetoFront<T, K1, K2, F1, F2>
+where
+    T: Debug,
+    K1: Ord + Copy + Debug,
+    K2: Ord + Copy + Debug,
+    F1: Fn(&T) -> K1,
+    F2: Fn(&T) -> K2,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParetoFront")
+            .field("items", &self.items)
+            .finish()
+    }
 }
 
 impl<T, K1, K2, F1, F2> ParetoFront<T, K1, K2, F1, F2>
