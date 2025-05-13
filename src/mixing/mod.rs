@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::BufReader;
 use std::path::Path;
 use topological_sort::TopologicalSort;
@@ -12,7 +13,7 @@ const MAX_EFFECTS: u32 = 8;
 const NUM_EFFECTS: usize = 34;
 
 bitflags! {
-    #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash, Serialize, Deserialize)]
+    #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
     pub struct Effects: u64 {
         const AntiGravity = 1 << 0;
         const Athletic = 1 << 1;
@@ -48,6 +49,12 @@ bitflags! {
         const ThoughtProvoking = 1 << 31;
         const TropicThunder = 1 << 32;
         const Zombifying = 1 << 33;
+    }
+}
+
+impl Hash for Effects {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.bits());
     }
 }
 
@@ -128,27 +135,11 @@ pub const SUBSTANCES: &[Substance] = &[
 ];
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum WeedType {
+pub enum Drugs {
     OGKush,
     SourDiesel,
     GreenCrack,
     GranddaddyPurple,
-}
-
-impl Display for WeedType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            WeedType::OGKush => write!(f, "OG Kush"),
-            WeedType::SourDiesel => write!(f, "Sour Diesel"),
-            WeedType::GreenCrack => write!(f, "Green Crack"),
-            WeedType::GranddaddyPurple => write!(f, "Granddaddy Purple"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub enum Drugs {
-    Weed(WeedType),
     Meth,
     Cocaine,
 }
@@ -156,7 +147,10 @@ pub enum Drugs {
 impl Display for Drugs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Drugs::Weed(w) => w.fmt(f),
+            Drugs::OGKush => write!(f, "OG Kush"),
+            Drugs::SourDiesel => write!(f, "Sour Diesel"),
+            Drugs::GreenCrack => write!(f, "Green Crack"),
+            Drugs::GranddaddyPurple => write!(f, "Granddaddy Purple"),
             Drugs::Meth => {
                 write!(f, "Meth")
             }
@@ -169,10 +163,10 @@ impl Display for Drugs {
 
 pub fn inherent_effects(drug: Drugs) -> Effects {
     match drug {
-        Drugs::Weed(WeedType::OGKush) => Effects::Calming,
-        Drugs::Weed(WeedType::SourDiesel) => Effects::Refreshing,
-        Drugs::Weed(WeedType::GreenCrack) => Effects::Energizing,
-        Drugs::Weed(WeedType::GranddaddyPurple) => Effects::Sedating,
+        Drugs::OGKush => Effects::Calming,
+        Drugs::SourDiesel => Effects::Refreshing,
+        Drugs::GreenCrack => Effects::Energizing,
+        Drugs::GranddaddyPurple => Effects::Sedating,
         _ => Effects::empty(),
     }
 }

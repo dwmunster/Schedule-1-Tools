@@ -1,12 +1,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use dashmap::DashMap;
+use fnv::FnvHashMap;
 use schedule1::mixing::{parse_rules_file, Drugs, Effects};
 use schedule1::packing::PackedValues;
 use schedule1::search;
-use schedule1::search::pareto::ParetoFront;
-use schedule1::search::{base_price, profit, substance_cost, SearchQueueItem};
+use schedule1::search::{base_price, profit, SearchQueueItem};
 use std::path::PathBuf;
-use std::sync::Arc;
 use topset::TopSet;
 
 pub fn depth_first_search(c: &mut Criterion) {
@@ -32,17 +30,9 @@ pub fn pareto(c: &mut Criterion) {
 
     c.bench_function("pareto", |b| {
         b.iter(|| {
-            let front = Arc::new(DashMap::new());
-            search::depth_first_search_pareto(&rules, initial, 5, front.clone(), || {
-                ParetoFront::new(
-                    |item: &SearchQueueItem| {
-                        item.substances.iter().map(substance_cost).sum::<i64>()
-                    },
-                    |item| item.substances.len(),
-                )
-            });
+            let mut front = FnvHashMap::default();
+            search::depth_first_search_pareto(&rules, initial, 5, &mut front);
             let mut top = TopSet::new(5, PartialOrd::gt);
-            let front = Arc::into_inner(front).unwrap();
             for (effects, f) in front {
                 let min = f.min_objective_1().unwrap();
                 top.insert((
@@ -60,5 +50,5 @@ pub fn pareto(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, depth_first_search, pareto);
+criterion_group!(benches, pareto);
 criterion_main!(benches);

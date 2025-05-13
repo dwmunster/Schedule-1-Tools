@@ -1,14 +1,15 @@
 use crate::mixing::{parse_rules_file, MixtureRules, SUBSTANCES};
 use crate::packing::PackedValues;
-use crate::search::pareto::ParetoFront;
 use crate::search::{base_price, profit};
 use clap::Parser;
 use crossbeam::queue::ArrayQueue;
-use dashmap::DashMap;
+use fnv::FnvBuildHasher;
 use indicatif::{ProgressBar, ProgressStyle};
-use mixing::{Drugs, WeedType};
+use mixing::Drugs;
 use search::SearchQueueItem;
 use std::cmp::min;
+use std::collections::HashMap;
+use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -68,7 +69,7 @@ struct Args {
     pareto: bool,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     let rules = Arc::new(parse_rules_file(args.rules)?);
@@ -82,16 +83,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         queue.push(Drugs::Meth);
     }
     if args.kush || args.all_weed {
-        queue.push(Drugs::Weed(WeedType::OGKush));
+        queue.push(Drugs::OGKush);
     }
     if args.diesel || args.all_weed {
-        queue.push(Drugs::Weed(WeedType::SourDiesel));
+        queue.push(Drugs::SourDiesel);
     }
     if args.crack || args.all_weed {
-        queue.push(Drugs::Weed(WeedType::GreenCrack));
+        queue.push(Drugs::GreenCrack);
     }
     if args.purple || args.all_weed {
-        queue.push(Drugs::Weed(WeedType::GranddaddyPurple));
+        queue.push(Drugs::GranddaddyPurple);
     }
 
     let mut queue: Vec<_> = queue
@@ -106,30 +107,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let net_markup = 1.0 + args.markup;
 
     let top = if args.pareto {
-        let fronts = Arc::new(DashMap::with_capacity(25_211_935));
-        for item in queue {
-            search::depth_first_search_pareto(
-                &rules,
-                item,
-                args.num_mixins,
-                fronts.clone(),
-                || ParetoFront::new(SearchQueueItem::cost, SearchQueueItem::num_mixins),
-            );
-        }
+        let mut fronts = HashMap::with_capacity_and_hasher(10_000_000, FnvBuildHasher::default());
+
         let mut top = TopSet::new(args.max_results, PartialOrd::gt);
-        for (effects, f) in Arc::into_inner(fronts).unwrap() {
-            let min = f.min_objective_1().unwrap();
-            top.insert((
-                profit(
-                    base_price(min.data.drug) * net_markup,
-                    min.data.substances.iter(),
-                    effects,
-                    &rules,
-                    999,
-                ),
-                min.data,
-            ));
+
+        for item in queue {
+            search::depth_first_search_pareto(&rules, item, args.num_mixins, &mut fronts);
         }
+
+        for (effects, f) in fronts {
+            if let Some(min) = f
+                .items
+                .iter()
+                .filter(|i| i.objective2 <= args.num_mixins)
+                .min_by_key(|i| i.objective1)
+            {
+                top.insert((
+                    profit(
+                        base_price(min.data.drug) * net_markup,
+                        min.data.substances.iter(),
+                        effects,
+                        &rules,
+                        999,
+                    ),
+                    min.data,
+                ));
+            }
+        }
+
         top.into_sorted_vec()
     } else {
         parallel_brute_dfs(

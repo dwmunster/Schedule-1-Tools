@@ -5,10 +5,11 @@ use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
 use crate::packing::PackedValues;
 use crate::search::pareto::ParetoFront;
-use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::min;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::hash::BuildHasher;
+use std::ops::{Deref, DerefMut};
 use topset::TopSet;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Serialize, Deserialize)]
@@ -125,26 +126,82 @@ pub fn depth_first_search(
     top.into_sorted_vec()
 }
 
-pub fn depth_first_search_pareto<F1, F2, F3>(
+// #[derive(Debug)]
+pub struct ParetoSearchFront(
+    ParetoFront<
+        SearchQueueItem,
+        i64,
+        usize,
+        fn(&SearchQueueItem) -> i64,
+        fn(&SearchQueueItem) -> usize,
+    >,
+);
+
+impl ParetoSearchFront {
+    pub fn new() -> Self {
+        ParetoSearchFront(ParetoFront::new(
+            SearchQueueItem::cost,
+            SearchQueueItem::num_mixins,
+        ))
+    }
+}
+
+impl Default for ParetoSearchFront {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Deref for ParetoSearchFront {
+    type Target = ParetoFront<
+        SearchQueueItem,
+        i64,
+        usize,
+        fn(&SearchQueueItem) -> i64,
+        fn(&SearchQueueItem) -> usize,
+    >;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ParetoSearchFront {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Serialize for ParetoSearchFront {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.items.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ParetoSearchFront {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut p = Self::default();
+        p.0.items = Deserialize::deserialize(deserializer)?;
+        Ok(p)
+    }
+}
+
+pub fn depth_first_search_pareto<S>(
     rules: &MixtureRules,
     initial: SearchQueueItem,
     num_mixins: usize,
-    fronts: Arc<DashMap<Effects, ParetoFront<SearchQueueItem, i64, usize, F1, F2>>>,
-    new_front: F3,
+    fronts: &mut HashMap<Effects, ParetoSearchFront, S>,
 ) where
-    F1: Fn(&SearchQueueItem) -> i64,
-    F2: Fn(&SearchQueueItem) -> usize,
-    F3: Fn() -> ParetoFront<SearchQueueItem, i64, usize, F1, F2>,
+    S: BuildHasher,
 {
     let mut stack = vec![initial];
 
     while let Some(item) = stack.pop() {
-        let mut f = fronts.entry(item.effects).or_insert_with(&new_front);
-        if !f.value_mut().add(item) {
-            // This item does not lead to a possible improvement, prune.
-            continue;
-        }
-
         if item.substances.len() == num_mixins {
             // If we've already assigned TOTAL_STATIONS, then we cannot add more.
             continue;
@@ -155,11 +212,18 @@ pub fn depth_first_search_pareto<F1, F2, F3>(
                 substances
                     .push(substance)
                     .expect("should have sufficient room");
-                stack.push(SearchQueueItem {
+                let item = SearchQueueItem {
                     drug: item.drug,
                     substances,
                     effects: eff,
-                });
+                };
+                let f = fronts.entry(item.effects).or_default();
+                if !f.0.add(item) {
+                    // This item does not lead to a possible improvement, prune.
+                    continue;
+                }
+
+                stack.push(item);
             }
         }
     }
@@ -167,7 +231,7 @@ pub fn depth_first_search_pareto<F1, F2, F3>(
 
 pub fn base_price(drug: Drugs) -> f64 {
     match drug {
-        Drugs::Weed(_) => 35.0,
+        Drugs::OGKush | Drugs::SourDiesel | Drugs::GreenCrack | Drugs::GranddaddyPurple => 35.0,
         Drugs::Meth => 70.0,
         Drugs::Cocaine => 150.0,
     }

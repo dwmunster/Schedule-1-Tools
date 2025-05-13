@@ -15,7 +15,7 @@ path = "src/bin.rs"
 bitflags = { features = ["serde"], version = "2.9.0" }
 clap = { version = "4.5.36", features = ["derive"] }
 crossbeam = "0.8.4"
-dashmap = { version = "6.1.0", features = ["inline"] }
+fnv = "1.0.7"
 indicatif = { version = "0.17.11", features = ["rayon"] }
 num_cpus = "1.16.0"
 serde = { version = "1.0.219", features = ["derive"] }
