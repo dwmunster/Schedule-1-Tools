@@ -1,5 +1,6 @@
 #[allow(dead_code)]
 pub mod pareto;
+pub mod pareto_db;
 
 use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
