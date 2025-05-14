@@ -115,6 +115,11 @@ impl<T: Packable, const BITS_PER_ENTRY: usize> PackedValues<T, BITS_PER_ENTRY> {
     // Mask for extracting bits for a single entry
     const ENTRY_MASK: u128 = (1 << BITS_PER_ENTRY) - 1;
 
+    // Get the data value
+    pub fn bits(&self) -> u128 {
+        self.data
+    }
+
     // Push a new value onto the end if there's space
     pub fn push(&mut self, value: T) -> Result<(), &'static str> {
         if self.count >= Self::MAX_ENTRIES {
@@ -193,6 +198,23 @@ impl<T: Packable, const BITS_PER_ENTRY: usize> PackedValues<T, BITS_PER_ENTRY> {
         PackedIterator {
             packed: *self,
             current: 0,
+        }
+    }
+}
+
+impl<T: Packable, const BITS_PER_ENTRY: usize> From<u128> for PackedValues<T, BITS_PER_ENTRY> {
+    fn from(value: u128) -> Self {
+        let data = value;
+        let mut count = 0;
+        let mut value = value;
+        while value & Self::ENTRY_MASK != 0 {
+            count += 1;
+            value >>= BITS_PER_ENTRY;
+        }
+        Self {
+            data,
+            count,
+            _marker: PhantomData,
         }
     }
 }

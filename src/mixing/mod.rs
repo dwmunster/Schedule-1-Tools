@@ -58,6 +58,12 @@ impl Hash for Effects {
     }
 }
 
+impl From<u64> for Effects {
+    fn from(val: u64) -> Effects {
+        Effects::from_bits(val).unwrap()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
 #[repr(u8)]
 pub enum Substance {
@@ -135,6 +141,7 @@ pub const SUBSTANCES: &[Substance] = &[
 ];
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum Drugs {
     OGKush,
     SourDiesel,
@@ -142,6 +149,20 @@ pub enum Drugs {
     GranddaddyPurple,
     Meth,
     Cocaine,
+}
+
+impl From<u8> for Drugs {
+    fn from(value: u8) -> Drugs {
+        match value {
+            0 => Drugs::OGKush,
+            1 => Drugs::SourDiesel,
+            2 => Drugs::GreenCrack,
+            3 => Drugs::GranddaddyPurple,
+            4 => Drugs::Meth,
+            5 => Drugs::Cocaine,
+            _ => panic!("drug index out of bounds"),
+        }
+    }
 }
 
 impl Display for Drugs {
