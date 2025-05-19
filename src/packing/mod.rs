@@ -91,8 +91,8 @@ impl<T: Packable + Debug, const N: usize> Debug for PackedValues<T, N> {
 impl<T: Packable, const BITS_PER_ENTRY: usize> PackedValues<T, BITS_PER_ENTRY> {
     // Create a new empty packed container
     pub fn new() -> Self {
-        // Validate at compile time that BITS_PER_ENTRY is valid
-        assert!(BITS_PER_ENTRY > 0 && BITS_PER_ENTRY <= 8);
+        // Validate that BITS_PER_ENTRY is valid
+        assert!(BITS_PER_ENTRY > 0);
 
         // Ensure the type can fit in the specified number of bits
         let max_storable_value = (1 << BITS_PER_ENTRY) - 1;
