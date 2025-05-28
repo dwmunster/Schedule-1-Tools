@@ -7,19 +7,6 @@ use schedule1::search::{base_price, profit, SearchQueueItem};
 use std::path::PathBuf;
 use topset::TopSet;
 
-pub fn depth_first_search(c: &mut Criterion) {
-    let rules = parse_rules_file(PathBuf::from("sch1-mix-rules.json")).expect("must parse rules");
-    let initial = SearchQueueItem {
-        drug: Drugs::Cocaine,
-        substances: PackedValues::new(),
-        effects: Effects::empty(),
-    };
-
-    c.bench_function("depth_first_search", |b| {
-        b.iter(|| search::depth_first_search(&rules, initial, 5, 6, 1.0, 999))
-    });
-}
-
 pub fn pareto(c: &mut Criterion) {
     let rules = parse_rules_file(PathBuf::from("sch1-mix-rules.json")).expect("must parse rules");
     let initial = SearchQueueItem {

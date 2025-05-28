@@ -1,6 +1,5 @@
 #[allow(dead_code)]
 pub mod pareto;
-pub mod pareto_db;
 
 use crate::mixing::Drugs;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
@@ -11,7 +10,6 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 use std::ops::{Deref, DerefMut};
-use topset::TopSet;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Serialize, Deserialize)]
 pub struct SearchQueueItem {
@@ -58,73 +56,6 @@ pub fn apply_substance(
         return None;
     }
     Some(new_effects)
-}
-
-pub fn depth_first_search(
-    rules: &MixtureRules,
-    initial: SearchQueueItem,
-    max_results: usize,
-    num_mixins: usize,
-    markup: f64,
-    max_price: i64,
-) -> Vec<(i64, SearchQueueItem)> {
-    let net_markup = 1.0 + markup;
-
-    let mut stack = vec![initial];
-
-    let mut top = TopSet::new(max_results, PartialOrd::gt);
-
-    while let Some(item) = stack.pop() {
-        let base = base_price(item.drug) * net_markup;
-        let profit = profit(base, item.substances.iter(), item.effects, rules, max_price);
-        let mut improvement = top
-            .peek()
-            .is_none_or(|(p, _): &(i64, SearchQueueItem)| *p < profit);
-
-        let mut drain = false;
-        if let Some((p, _)) = top.iter().find(|(_, i)| i.effects == item.effects) {
-            if *p >= profit {
-                // Worse version of an existing recipe, continue
-                improvement = false;
-            } else {
-                // Otherwise, take out the old one.
-                drain = true;
-            }
-        }
-        // This, in theory, should be done in the if let block above. However, the
-        // top.iter().find(...) holds onto a reference to `top`, not allowing us to drain it.
-        if drain {
-            let items = top.drain().filter(|(_, i)| i.effects != item.effects);
-            let mut top2 = TopSet::new(max_results, PartialOrd::gt);
-            for item in items {
-                top2.insert(item);
-            }
-            top = top2;
-        }
-        if improvement {
-            top.insert((profit, item));
-        }
-
-        if item.substances.len() == num_mixins {
-            // If we've already assigned TOTAL_STATIONS, then we cannot add more.
-            continue;
-        }
-        for substance in SUBSTANCES.iter().copied() {
-            if let Some(eff) = apply_substance(item.effects, substance, rules) {
-                let mut substances = item.substances;
-                substances
-                    .push(substance)
-                    .expect("should have sufficient room");
-                stack.push(SearchQueueItem {
-                    drug: item.drug,
-                    substances,
-                    effects: eff,
-                });
-            }
-        }
-    }
-
-    top.into_sorted_vec()
 }
 
 // #[derive(Debug)]
