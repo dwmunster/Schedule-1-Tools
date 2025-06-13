@@ -9,8 +9,8 @@ use std::io::BufReader;
 use std::path::Path;
 use topological_sort::TopologicalSort;
 
-const MAX_EFFECTS: u32 = 8;
-const NUM_EFFECTS: usize = 34;
+pub const MAX_EFFECTS: u32 = 8;
+pub const NUM_EFFECTS: usize = 34;
 
 bitflags! {
     #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]

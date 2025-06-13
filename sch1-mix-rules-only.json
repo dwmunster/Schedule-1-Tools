@@ -1,0 +1,916 @@
+{
+  "rules": [
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["La"],
+      "requires_substance": "A",
+      "replace": {
+        "Eu": "La"
+      }
+    },
+    {
+      "if_present": ["Fo"],
+      "if_not_present": ["Cy"],
+      "requires_substance": "A",
+      "replace": {
+        "Fo": "Cy"
+      }
+    },
+    {
+      "if_present": ["Gi"],
+      "if_not_present": ["Tp"],
+      "requires_substance": "A",
+      "replace": {
+        "Gi": "Tp"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["At"],
+      "requires_substance": "A",
+      "replace": {
+        "Mu": "At"
+      }
+    },
+    {
+      "if_present": ["Sl"],
+      "if_not_present": ["Mu"],
+      "requires_substance": "A",
+      "replace": {
+        "Sl": "Mu"
+      }
+    },
+    {
+      "if_present": ["Sn"],
+      "if_not_present": ["Pa"],
+      "requires_substance": "A",
+      "replace": {
+        "Sn": "Pa"
+      }
+    },
+    {
+      "if_present": ["To"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "A",
+      "replace": {
+        "To": "Eu"
+      }
+    },
+    {
+      "if_present": ["At"],
+      "if_not_present": ["Mu"],
+      "requires_substance": "B",
+      "replace": {
+        "At": "Mu"
+      }
+    },
+    {
+      "if_present": ["Ca"],
+      "if_not_present": ["Be"],
+      "requires_substance": "B",
+      "replace": {
+        "Ca": "Be"
+      }
+    },
+    {
+      "if_present": ["Cy"],
+      "if_not_present": ["Fo"],
+      "requires_substance": "B",
+      "replace": {
+        "Cy": "Fo"
+      }
+    },
+    {
+      "if_present": ["El"],
+      "if_not_present": ["Re"],
+      "requires_substance": "B",
+      "replace": {
+        "El": "Re"
+      }
+    },
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["To"],
+      "requires_substance": "B",
+      "replace": {
+        "Eu": "To"
+      }
+    },
+    {
+      "if_present": ["Fc"],
+      "if_not_present": ["Ca"],
+      "requires_substance": "B",
+      "replace": {
+        "Fc": "Ca"
+      }
+    },
+    {
+      "if_present": ["La"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "B",
+      "replace": {
+        "La": "Eu"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["Sl"],
+      "requires_substance": "B",
+      "replace": {
+        "Mu": "Sl"
+      }
+    },
+    {
+      "if_present": ["Sh"],
+      "if_not_present": ["Pa"],
+      "requires_substance": "B",
+      "replace": {
+        "Sh": "Pa"
+      }
+    },
+    {
+      "if_present": ["Tp"],
+      "if_not_present": ["Gi"],
+      "requires_substance": "B",
+      "replace": {
+        "Tp": "Gi"
+      }
+    },
+    {
+      "if_present": ["Di"],
+      "if_not_present": ["Gl"],
+      "requires_substance": "C",
+      "replace": {
+        "Di": "Gl"
+      }
+    },
+    {
+      "if_present": ["El"],
+      "if_not_present": ["Di"],
+      "requires_substance": "C",
+      "replace": {
+        "El": "Di"
+      }
+    },
+    {
+      "if_present": ["En"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "C",
+      "replace": {
+        "En": "Eu"
+      }
+    },
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["Sp"],
+      "requires_substance": "C",
+      "replace": {
+        "Eu": "Sp"
+      }
+    },
+    {
+      "if_present": ["Gi"],
+      "if_not_present": ["Sm"],
+      "requires_substance": "C",
+      "replace": {
+        "Gi": "Sm"
+      }
+    },
+    {
+      "if_present": ["Je"],
+      "if_not_present": ["Sn"],
+      "requires_substance": "C",
+      "replace": {
+        "Je": "Sn"
+      }
+    },
+    {
+      "if_present": ["La"],
+      "if_not_present": ["Fo"],
+      "requires_substance": "C",
+      "replace": {
+        "La": "Fo"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["Se"],
+      "requires_substance": "C",
+      "replace": {
+        "Mu": "Se"
+      }
+    },
+    {
+      "if_present": ["Pa"],
+      "if_not_present": ["Ca"],
+      "requires_substance": "C",
+      "replace": {
+        "Pa": "Ca"
+      }
+    },
+    {
+      "if_present": ["Sh"],
+      "if_not_present": ["Fc"],
+      "requires_substance": "C",
+      "replace": {
+        "Sh": "Fc"
+      }
+    },
+    {
+      "if_present": ["Sn"],
+      "if_not_present": ["Tt"],
+      "requires_substance": "C",
+      "replace": {
+        "Sn": "Tt"
+      }
+    },
+    {
+      "if_present": ["Ag"],
+      "if_not_present": ["Sl"],
+      "requires_substance": "D",
+      "replace": {
+        "Ag": "Sl"
+      }
+    },
+    {
+      "if_present": ["Ba"],
+      "if_not_present": ["Sn"],
+      "requires_substance": "D",
+      "replace": {
+        "Ba": "Sn"
+      }
+    },
+    {
+      "if_present": ["Cd"],
+      "if_not_present": ["Ex"],
+      "requires_substance": "D",
+      "replace": {
+        "Cd": "Ex"
+      }
+    },
+    {
+      "if_present": ["Fc"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "D",
+      "replace": {
+        "Fc": "Eu"
+      }
+    },
+    {
+      "if_present": ["Je"],
+      "if_not_present": ["Gi"],
+      "requires_substance": "D",
+      "replace": {
+        "Je": "Gi"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["Ca"],
+      "requires_substance": "D",
+      "replace": {
+        "Mu": "Ca"
+      }
+    },
+    {
+      "if_present": ["Sh"],
+      "if_not_present": ["En"],
+      "requires_substance": "D",
+      "replace": {
+        "Sh": "En"
+      }
+    },
+    {
+      "if_present": ["Di"],
+      "if_not_present": ["El"],
+      "requires_substance": "E",
+      "replace": {
+        "Di": "El"
+      }
+    },
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["En"],
+      "requires_substance": "E",
+      "replace": {
+        "Eu": "En"
+      }
+    },
+    {
+      "if_present": ["Fc"],
+      "if_not_present": ["Sh"],
+      "requires_substance": "E",
+      "replace": {
+        "Fc": "Sh"
+      }
+    },
+    {
+      "if_present": ["Fo"],
+      "if_not_present": ["La"],
+      "requires_substance": "E",
+      "replace": {
+        "Fo": "La"
+      }
+    },
+    {
+      "if_present": ["Gl"],
+      "if_not_present": ["Di"],
+      "requires_substance": "E",
+      "replace": {
+        "Gl": "Di"
+      }
+    },
+    {
+      "if_present": ["Sc"],
+      "if_not_present": ["Ba"],
+      "requires_substance": "E",
+      "replace": {
+        "Sc": "Ba"
+      }
+    },
+    {
+      "if_present": ["Se"],
+      "if_not_present": ["Mu"],
+      "requires_substance": "E",
+      "replace": {
+        "Se": "Mu"
+      }
+    },
+    {
+      "if_present": ["Sp"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "E",
+      "replace": {
+        "Sp": "Eu"
+      }
+    },
+    {
+      "if_present": ["Tt"],
+      "if_not_present": ["Sn"],
+      "requires_substance": "E",
+      "replace": {
+        "Tt": "Sn"
+      }
+    },
+    {
+      "if_present": ["Ca"],
+      "if_not_present": ["Ag"],
+      "requires_substance": "F",
+      "replace": {
+        "Ca": "Ag"
+      }
+    },
+    {
+      "if_present": ["Cd"],
+      "if_not_present": ["Sn"],
+      "requires_substance": "F",
+      "replace": {
+        "Cd": "Sn"
+      }
+    },
+    {
+      "if_present": ["Ex"],
+      "if_not_present": ["Se"],
+      "requires_substance": "F",
+      "replace": {
+        "Ex": "Se"
+      }
+    },
+    {
+      "if_present": ["Fc"],
+      "if_not_present": ["Je"],
+      "requires_substance": "F",
+      "replace": {
+        "Fc": "Je"
+      }
+    },
+    {
+      "if_present": ["En"],
+      "if_not_present": ["Mu"],
+      "requires_substance": "G",
+      "replace": {
+        "En": "Mu"
+      }
+    },
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["Se"],
+      "requires_substance": "G",
+      "replace": {
+        "Eu": "Se"
+      }
+    },
+    {
+      "if_present": ["Fo"],
+      "if_not_present": ["To"],
+      "requires_substance": "G",
+      "replace": {
+        "Fo": "To"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["Sc"],
+      "requires_substance": "G",
+      "replace": {
+        "Mu": "Sc"
+      }
+    },
+    {
+      "if_present": ["Pa"],
+      "if_not_present": ["Ag"],
+      "requires_substance": "G",
+      "replace": {
+        "Pa": "Ag"
+      }
+    },
+    {
+      "if_present": ["Ca"],
+      "if_not_present": ["Sn"],
+      "requires_substance": "H",
+      "replace": {
+        "Ca": "Sn"
+      }
+    },
+    {
+      "if_present": ["Cy"],
+      "if_not_present": ["En"],
+      "requires_substance": "H",
+      "replace": {
+        "Cy": "En"
+      }
+    },
+    {
+      "if_present": ["Di"],
+      "if_not_present": ["Fc"],
+      "requires_substance": "H",
+      "replace": {
+        "Di": "Fc"
+      }
+    },
+    {
+      "if_present": ["En"],
+      "if_not_present": ["Tp"],
+      "requires_substance": "H",
+      "replace": {
+        "En": "Tp"
+      }
+    },
+    {
+      "if_present": ["Fc"],
+      "if_not_present": ["Si"],
+      "requires_substance": "H",
+      "replace": {
+        "Fc": "Si"
+      }
+    },
+    {
+      "if_present": ["Lf"],
+      "if_not_present": ["Re"],
+      "requires_substance": "H",
+      "replace": {
+        "Lf": "Re"
+      }
+    },
+    {
+      "if_present": ["Pa"],
+      "if_not_present": ["Je"],
+      "requires_substance": "H",
+      "replace": {
+        "Pa": "Je"
+      }
+    },
+    {
+      "if_present": ["Sm"],
+      "if_not_present": ["Ag"],
+      "requires_substance": "H",
+      "replace": {
+        "Sm": "Ag"
+      }
+    },
+    {
+      "if_present": ["To"],
+      "if_not_present": ["Sm"],
+      "requires_substance": "H",
+      "replace": {
+        "To": "Sm"
+      }
+    },
+    {
+      "if_present": ["Ag"],
+      "if_not_present": ["Tt"],
+      "requires_substance": "I",
+      "replace": {
+        "Ag": "Tt"
+      }
+    },
+    {
+      "if_present": ["At"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "I",
+      "replace": {
+        "At": "Eu"
+      }
+    },
+    {
+      "if_present": ["La"],
+      "if_not_present": ["Lf"],
+      "requires_substance": "I",
+      "replace": {
+        "La": "Lf"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["To"],
+      "requires_substance": "I",
+      "replace": {
+        "Mu": "To"
+      }
+    },
+    {
+      "if_present": ["Sh"],
+      "if_not_present": ["Re"],
+      "requires_substance": "I",
+      "replace": {
+        "Sh": "Re"
+      }
+    },
+    {
+      "if_present": ["Sn"],
+      "if_not_present": ["Be"],
+      "requires_substance": "I",
+      "replace": {
+        "Sn": "Be"
+      }
+    },
+    {
+      "if_present": ["Ca"],
+      "if_not_present": ["Ba"],
+      "requires_substance": "J",
+      "replace": {
+        "Ca": "Ba"
+      }
+    },
+    {
+      "if_present": ["Cd"],
+      "if_not_present": ["Gi"],
+      "requires_substance": "J",
+      "replace": {
+        "Cd": "Gi"
+      }
+    },
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["Si"],
+      "requires_substance": "J",
+      "replace": {
+        "Eu": "Si"
+      }
+    },
+    {
+      "if_present": ["Fo"],
+      "if_not_present": ["Pa"],
+      "requires_substance": "J",
+      "replace": {
+        "Fo": "Pa"
+      }
+    },
+    {
+      "if_present": ["Re"],
+      "if_not_present": ["Tp"],
+      "requires_substance": "J",
+      "replace": {
+        "Re": "Tp"
+      }
+    },
+    {
+      "if_present": ["To"],
+      "if_not_present": ["Sn"],
+      "requires_substance": "J",
+      "replace": {
+        "To": "Sn"
+      }
+    },
+    {
+      "if_present": ["Ca"],
+      "if_not_present": ["Sl"],
+      "requires_substance": "K",
+      "replace": {
+        "Ca": "Sl"
+      }
+    },
+    {
+      "if_present": ["El"],
+      "if_not_present": ["At"],
+      "requires_substance": "K",
+      "replace": {
+        "El": "At"
+      }
+    },
+    {
+      "if_present": ["En"],
+      "if_not_present": ["Pa"],
+      "requires_substance": "K",
+      "replace": {
+        "En": "Pa"
+      }
+    },
+    {
+      "if_present": ["Fc"],
+      "if_not_present": ["Gi"],
+      "requires_substance": "K",
+      "replace": {
+        "Fc": "Gi"
+      }
+    },
+    {
+      "if_present": ["Fo"],
+      "if_not_present": ["Ca"],
+      "requires_substance": "K",
+      "replace": {
+        "Fo": "Ca"
+      }
+    },
+    {
+      "if_present": ["Gl"],
+      "if_not_present": ["To"],
+      "requires_substance": "K",
+      "replace": {
+        "Gl": "To"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["Ag"],
+      "requires_substance": "K",
+      "replace": {
+        "Mu": "Ag"
+      }
+    },
+    {
+      "if_present": ["Pa"],
+      "if_not_present": ["Ba"],
+      "requires_substance": "K",
+      "replace": {
+        "Pa": "Ba"
+      }
+    },
+    {
+      "if_present": ["Sp"],
+      "if_not_present": ["Be"],
+      "requires_substance": "K",
+      "replace": {
+        "Sp": "Be"
+      }
+    },
+    {
+      "if_present": ["To"],
+      "if_not_present": ["Tt"],
+      "requires_substance": "K",
+      "replace": {
+        "To": "Tt"
+      }
+    },
+    {
+      "if_present": ["At"],
+      "if_not_present": ["Sn"],
+      "requires_substance": "L",
+      "replace": {
+        "At": "Sn"
+      }
+    },
+    {
+      "if_present": ["Di"],
+      "if_not_present": ["To"],
+      "requires_substance": "L",
+      "replace": {
+        "Di": "To"
+      }
+    },
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["Be"],
+      "requires_substance": "L",
+      "replace": {
+        "Eu": "Be"
+      }
+    },
+    {
+      "if_present": ["La"],
+      "if_not_present": ["Ca"],
+      "requires_substance": "L",
+      "replace": {
+        "La": "Ca"
+      }
+    },
+    {
+      "if_present": ["Sh"],
+      "if_not_present": ["Gi"],
+      "requires_substance": "L",
+      "replace": {
+        "Sh": "Gi"
+      }
+    },
+    {
+      "if_present": ["Ag"],
+      "if_not_present": ["Ca"],
+      "requires_substance": "M",
+      "replace": {
+        "Ag": "Ca"
+      }
+    },
+    {
+      "if_present": ["Gi"],
+      "if_not_present": ["Re"],
+      "requires_substance": "M",
+      "replace": {
+        "Gi": "Re"
+      }
+    },
+    {
+      "if_present": ["Si"],
+      "if_not_present": ["En"],
+      "requires_substance": "M",
+      "replace": {
+        "Si": "En"
+      }
+    },
+    {
+      "if_present": ["Tp"],
+      "if_not_present": ["El"],
+      "requires_substance": "M",
+      "replace": {
+        "Tp": "El"
+      }
+    },
+    {
+      "if_present": ["At"],
+      "if_not_present": ["La"],
+      "requires_substance": "N",
+      "replace": {
+        "At": "La"
+      }
+    },
+    {
+      "if_present": ["Ca"],
+      "if_not_present": ["Gl"],
+      "requires_substance": "N",
+      "replace": {
+        "Ca": "Gl"
+      }
+    },
+    {
+      "if_present": ["En"],
+      "if_not_present": ["Cy"],
+      "requires_substance": "N",
+      "replace": {
+        "En": "Cy"
+      }
+    },
+    {
+      "if_present": ["Fc"],
+      "if_not_present": ["Di"],
+      "requires_substance": "N",
+      "replace": {
+        "Fc": "Di"
+      }
+    },
+    {
+      "if_present": ["Je"],
+      "if_not_present": ["Pa"],
+      "requires_substance": "N",
+      "replace": {
+        "Je": "Pa"
+      }
+    },
+    {
+      "if_present": ["Si"],
+      "if_not_present": ["Fc"],
+      "requires_substance": "N",
+      "replace": {
+        "Si": "Fc"
+      }
+    },
+    {
+      "if_present": ["Sh"],
+      "if_not_present": ["El"],
+      "requires_substance": "N",
+      "replace": {
+        "Sh": "El"
+      }
+    },
+    {
+      "if_present": ["Sl"],
+      "if_not_present": ["To"],
+      "requires_substance": "N",
+      "replace": {
+        "Sl": "To"
+      }
+    },
+    {
+      "if_present": ["Sn"],
+      "if_not_present": ["Ca"],
+      "requires_substance": "N",
+      "replace": {
+        "Sn": "Ca"
+      }
+    },
+    {
+      "if_present": ["Tp"],
+      "if_not_present": ["En"],
+      "requires_substance": "N",
+      "replace": {
+        "Tp": "En"
+      }
+    },
+    {
+      "if_present": ["Ex"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "O",
+      "replace": {
+        "Ex": "Eu"
+      }
+    },
+    {
+      "if_present": ["Fo"],
+      "if_not_present": ["En"],
+      "requires_substance": "O",
+      "replace": {
+        "Fo": "En"
+      }
+    },
+    {
+      "if_present": ["Gl"],
+      "if_not_present": ["Re"],
+      "requires_substance": "O",
+      "replace": {
+        "Gl": "Re"
+      }
+    },
+    {
+      "if_present": ["Lf"],
+      "if_not_present": ["El"],
+      "requires_substance": "O",
+      "replace": {
+        "Lf": "El"
+      }
+    },
+    {
+      "if_present": ["Se"],
+      "if_not_present": ["Gi"],
+      "requires_substance": "O",
+      "replace": {
+        "Se": "Gi"
+      }
+    },
+    {
+      "if_present": ["Cy"],
+      "if_not_present": ["Gl"],
+      "requires_substance": "P",
+      "replace": {
+        "Cy": "Gl"
+      }
+    },
+    {
+      "if_present": ["El"],
+      "if_not_present": ["Eu"],
+      "requires_substance": "P",
+      "replace": {
+        "El": "Eu"
+      }
+    },
+    {
+      "if_present": ["Eu"],
+      "if_not_present": ["Zo"],
+      "requires_substance": "P",
+      "replace": {
+        "Eu": "Zo"
+      }
+    },
+    {
+      "if_present": ["La"],
+      "if_not_present": ["Cd"],
+      "requires_substance": "P",
+      "replace": {
+        "La": "Cd"
+      }
+    },
+    {
+      "if_present": ["Mu"],
+      "if_not_present": ["Tt"],
+      "requires_substance": "P",
+      "replace": {
+        "Mu": "Tt"
+      }
+    },
+    {
+      "if_present": ["Sh"],
+      "if_not_present": ["Mu"],
+      "requires_substance": "P",
+      "replace": {
+        "Sh": "Mu"
+      }
+    }
+  ]
+}
