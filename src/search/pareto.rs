@@ -63,6 +63,11 @@ where
             other.objective2,
         )
     }
+
+    /// Compare this item lexicographically with another.
+    pub fn compare_lexicographic(&self, other: &Self) -> Ordering {
+        (self.objective1, self.objective2).cmp(&(other.objective1, other.objective2))
+    }
 }
 
 /// A Pareto front that maintains a set of non-dominated items using key functions.
