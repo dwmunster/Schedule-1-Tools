@@ -1,22 +1,22 @@
 use crate::combinatorial::CombinatorialEncoder;
-use crate::mixing::{Effects, MixtureRules, SUBSTANCES};
+use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
 use savefile::SavefileError;
 use savefile_derive::Savefile;
 use std::io::Write;
 
-const GRAPH_VERSION: u32 = 1;
+type EffectIndex = u32;
+
+pub const GRAPH_VERSION: u32 = 1;
 
 #[derive(Savefile)]
-pub struct EffectGraph {
-    successors: Vec<[u32; SUBSTANCES.len()]>,
-    predecessors: Vec<Vec<u32>>,
+pub struct EffectGraph<const N: u8, const K: u8> {
+    successors: Vec<[EffectIndex; SUBSTANCES.len()]>,
+    predecessors: Vec<Vec<EffectIndex>>,
+    encoder: CombinatorialEncoder<N, K>,
 }
 
-impl EffectGraph {
-    pub fn new<const N: u8, const K: u8>(
-        rules: &MixtureRules,
-        encoder: &CombinatorialEncoder<N, K>,
-    ) -> Self {
+impl<const N: u8, const K: u8> EffectGraph<N, K> {
+    pub fn new(rules: &MixtureRules, encoder: CombinatorialEncoder<N, K>) -> Self {
         let n_combinations = encoder.maximum_index();
         let mut successors = vec![[0u32; SUBSTANCES.len()]; n_combinations as usize];
         let mut predecessors = vec![Vec::new(); n_combinations as usize];
@@ -44,10 +44,46 @@ impl EffectGraph {
         Self {
             successors,
             predecessors,
+            encoder,
         }
     }
 
     pub fn serialize(&self, writer: &mut impl Write) -> Result<(), SavefileError> {
         savefile::save(writer, GRAPH_VERSION, self)
+    }
+
+    pub fn num_nodes(&self) -> usize {
+        self.successors.len()
+    }
+
+    pub fn encode(&self, effects: Effects) -> EffectIndex {
+        self.encoder.encode(effects.bits())
+    }
+
+    pub fn decode(&self, id: EffectIndex) -> Option<Effects> {
+        Effects::from_bits(self.encoder.decode(id))
+    }
+
+    pub fn successors(&self, id: EffectIndex) -> &[EffectIndex; SUBSTANCES.len()] {
+        &self.successors[id as usize]
+    }
+
+    pub fn predecessors(&self, id: EffectIndex) -> &[EffectIndex] {
+        &self.predecessors[id as usize]
+    }
+
+    pub fn predecessors_with_substances(
+        &self,
+        id: EffectIndex,
+    ) -> impl Iterator<Item = (EffectIndex, Substance)> + use<'_, N, K> {
+        self.predecessors[id as usize].iter().map(move |n| {
+            (
+                *n,
+                SUBSTANCES[self.successors[*n as usize]
+                    .iter()
+                    .position(|n2| *n2 == id)
+                    .expect("failed to find matching substance")],
+            )
+        })
     }
 }

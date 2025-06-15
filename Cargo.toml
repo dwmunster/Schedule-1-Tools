@@ -19,6 +19,8 @@ path = "combinatorial-src/bin.rs"
 bitflags = { features = ["serde"], version = "2.9.0" }
 clap = { version = "4.5.36", features = ["derive"] }
 fnv = "1.0.7"
+indicatif = "0.17.11"
+priority-queue = "2.5.0"
 savefile = "0.18.6"
 savefile-derive = "0.18.6"
 serde = { version = "1.0.219", features = ["derive"] }

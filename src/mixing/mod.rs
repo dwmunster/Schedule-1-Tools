@@ -1,5 +1,6 @@
 use crate::packing::Packable;
 use bitflags::bitflags;
+use savefile_derive::Savefile;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -64,7 +65,9 @@ impl From<u64> for Effects {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(
+    Debug, PartialEq, Eq, Hash, Clone, Copy, Serialize, Deserialize, Ord, PartialOrd, Savefile,
+)]
 #[repr(u8)]
 pub enum Substance {
     Cuke,
