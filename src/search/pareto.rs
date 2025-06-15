@@ -4,7 +4,7 @@ use std::fmt::Debug;
 
 /// Represents the possible domination relationships between two items.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum DominationResult {
+pub enum DominationResult {
     /// The first item dominates the second item.
     FirstDominates,
     /// The second item dominates the first item.
@@ -55,7 +55,7 @@ where
 
     /// Compare this item with another item to determine their domination relationship.
     #[inline]
-    fn compare(&self, other: &Self) -> DominationResult {
+    pub fn compare(&self, other: &Self) -> DominationResult {
         Self::compare_raw(
             self.objective1,
             self.objective2,
