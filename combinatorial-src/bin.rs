@@ -2,12 +2,13 @@ mod mosp;
 
 use crate::mosp::{multiobjective_shortest_path, Label};
 use clap::Parser;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use savefile_derive::Savefile;
 use schedule1::combinatorial::CombinatorialEncoder;
 use schedule1::effect_graph::{EffectGraph, GRAPH_VERSION};
 use schedule1::mixing::{parse_rules_file, Effects, MixtureRules, Substance, SUBSTANCES};
 use schedule1::search::substance_cost;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -86,6 +87,21 @@ fn shortest_path<const N: u8, const K: u8>(
     })
 }
 
+fn trace_path(start: Label, paths: &[Vec<Label>]) -> Vec<Substance> {
+    let mut path = Vec::with_capacity(start.length as usize);
+    let mut l = start.clone();
+    while let Some((next, s)) = l.previous {
+        path.push(s);
+        l = *paths[next as usize]
+            .iter()
+            .find(|candidate| candidate.length == l.length - 1)
+            .expect("should find connected path");
+    }
+    // Since we started at the target and worked back to the root node, flip the order.
+    path.reverse();
+    path
+}
+
 fn search_exact<const N: u8, const K: u8>(
     effects: Effects,
     encoder: &CombinatorialEncoder<N, K>,
@@ -94,17 +110,7 @@ fn search_exact<const N: u8, const K: u8>(
     let starting_labels = &labels.paths[encoder.encode(effects.bits()) as usize];
     let mut paths = Vec::with_capacity(starting_labels.len());
     for potential_path in starting_labels {
-        let mut path = Vec::with_capacity(potential_path.length as usize);
-        let mut l = potential_path.clone();
-        while let Some((next, s)) = l.previous {
-            path.push(s);
-            l = *labels.paths[next as usize]
-                .iter()
-                .find(|candidate| candidate.length == l.length - 1)
-                .expect("should find connected path");
-        }
-        // Since we started at the target and worked back to the root node, flip the order.
-        path.reverse();
+        let path = trace_path(*potential_path, &labels.paths);
         paths.push(path);
     }
 
@@ -159,17 +165,63 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             bar.set_message("Loading routes");
             let shortest_paths = savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
-            let effects = bitflags::parser::from_str_strict(&effects).map_err(|e| e.to_string())?;
+            let target_effects =
+                bitflags::parser::from_str_strict(&effects).map_err(|e| e.to_string())?;
             bar.set_message("Searching for matching routes");
             if exact {
-                let paths = search_exact(effects, &encoder, shortest_paths);
+                let paths = search_exact(target_effects, &encoder, shortest_paths);
                 bar.finish_and_clear();
                 for path in paths {
                     let cost: i64 = path.iter().copied().map(substance_cost).sum();
                     println!("cost: {cost}, length: {}, substances: {path:?}", path.len());
                 }
             } else {
-                unimplemented!("missing non-exact search")
+                bar.set_style(
+                    ProgressStyle::with_template(
+                        "{wide_bar} {human_pos} / {human_len}\n{wide_msg}",
+                    )
+                    .unwrap(),
+                );
+                bar.set_message("Searching for matching routes");
+                bar.set_length(shortest_paths.paths.len() as u64);
+                let mut lowest_cost = None;
+                let mut shortest = None;
+                for (idx, paths) in shortest_paths.paths.iter().enumerate().progress_with(bar) {
+                    // only consider reachable effects
+                    if paths.is_empty() {
+                        continue;
+                    }
+                    let current_effects = Effects::from(encoder.decode(idx as u32));
+                    if !current_effects.contains(target_effects) {
+                        continue;
+                    }
+                    for path in paths {
+                        if path.cost < lowest_cost.get_or_insert((idx, *path)).1.cost {
+                            lowest_cost = Some((idx, *path));
+                        }
+                        if path.length < shortest.get_or_insert((idx, *path)).1.length {
+                            shortest = Some((idx, *path));
+                        }
+                    }
+                }
+                if lowest_cost.is_none() || shortest.is_none() {
+                    println!("No matching routes");
+                    return Ok(());
+                }
+                let lowest_cost = lowest_cost.unwrap();
+                let shortest = shortest.unwrap();
+
+                for (title, (idx, label)) in [("Lowest Cost", lowest_cost), ("Shortest", shortest)]
+                {
+                    let p = trace_path(label, &shortest_paths.paths);
+                    println!(
+                        "{title}:\n  Effects: {:?}\n  Cost: {}\n  Length: {}\n  Path: {:?}",
+                        Effects::from(encoder.decode(idx as u32)),
+                        label.cost,
+                        label.length,
+                        p
+                    )
+                }
             }
             Ok(())
         }
