@@ -2,34 +2,21 @@ mod mosp;
 
 use crate::mosp::{multiobjective_shortest_path, Label};
 use clap::Parser;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use savefile_derive::Savefile;
 use schedule1::combinatorial::CombinatorialEncoder;
 use schedule1::effect_graph::{EffectGraph, GRAPH_VERSION};
-use schedule1::mixing::{parse_rules_file, Drugs, Effects, MixtureRules, Substance, SUBSTANCES};
+use schedule1::mixing::{
+    inherent_effects, parse_rules_file, Drugs, Effects, MixtureRules, Substance, SUBSTANCES,
+};
 use schedule1::search::substance_cost;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-#[derive(Savefile)]
-struct ShortestPaths {
-    paths: Vec<Vec<Label>>,
-}
-
-#[derive(Savefile, Serialize, Deserialize)]
-struct ResultsFile {
-    price_multipliers: Vec<f64>,
-    kush: Vec<Vec<Label>>,
-    sour_diesel: Vec<Vec<Label>>,
-    green_crack: Vec<Vec<Label>>,
-    granddaddy_purple: Vec<Vec<Label>>,
-    meth_cocaine: Vec<Vec<Label>>,
-}
 
 #[derive(Savefile, Serialize, Deserialize)]
 struct FlatPaths {
@@ -93,8 +80,6 @@ enum Command {
         #[arg(long)]
         graph: PathBuf,
         #[arg(long)]
-        starting_effects: String,
-        #[arg(long)]
         output_file: PathBuf,
     },
     Search {
@@ -104,44 +89,6 @@ enum Command {
         effects: String,
         #[arg(long, default_value_t = false)]
         exact: bool,
-    },
-    Migrate {
-        #[arg(long)]
-        kush: PathBuf,
-
-        #[arg(long)]
-        diesel: PathBuf,
-
-        #[arg(long)]
-        green_crack: PathBuf,
-
-        #[arg(long)]
-        purple: PathBuf,
-
-        #[arg(long)]
-        meth_coke: PathBuf,
-
-        #[arg(long)]
-        output: PathBuf,
-    },
-    MigrateFlat {
-        #[arg(long)]
-        kush: PathBuf,
-
-        #[arg(long)]
-        diesel: PathBuf,
-
-        #[arg(long)]
-        green_crack: PathBuf,
-
-        #[arg(long)]
-        purple: PathBuf,
-
-        #[arg(long)]
-        meth_coke: PathBuf,
-
-        #[arg(long)]
-        output: PathBuf,
     },
 }
 
@@ -154,28 +101,27 @@ fn generate<const N: u8, const K: u8>(
         println!("'{graph_path:?}' exists, refusing to overwrite");
         return Ok(());
     }
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .open(graph_path)?;
+    let mut writer = BufWriter::new(file);
     let g = EffectGraph::new(rules, encoder);
-    g.serialize(&mut file).map_err(Into::into)
+    g.serialize(&mut writer).map_err(Into::into)
 }
 
 fn shortest_path<const N: u8, const K: u8>(
     starting: Effects,
     graph: &EffectGraph<N, K>,
-) -> Result<ShortestPaths, Box<dyn Error>> {
+) -> FlatPaths {
     let costs = SUBSTANCES
         .iter()
         .copied()
         .map(|s| substance_cost(s) as u32)
         .collect::<Vec<_>>();
 
-    Ok(ShortestPaths {
-        paths: multiobjective_shortest_path(graph, &costs, starting),
-    })
+    multiobjective_shortest_path(graph, &costs, starting).into()
 }
 
 fn trace_path(start: Label, paths: &FlatPaths) -> Vec<Substance> {
@@ -253,26 +199,59 @@ fn main() -> Result<(), Box<dyn Error>> {
             bar.finish_and_clear();
             Ok(())
         }
-        Command::ShortestPath {
-            graph,
-            starting_effects,
-            output_file,
-        } => {
-            let mut output_file = OpenOptions::new()
+        Command::ShortestPath { graph, output_file } => {
+            let output_file = OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true)
                 .open(output_file)?;
+            let mut writer = BufWriter::new(output_file);
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
             bar.set_message("Loading graph");
             let g: EffectGraph<34, 8> = savefile::load_file(graph, GRAPH_VERSION)?;
-            let starting =
-                bitflags::parser::from_str_strict(&starting_effects).map_err(|e| e.to_string())?;
+
+            bar.set_style(
+                ProgressStyle::with_template("{wide_bar} {pos}/{len}\n{wide_msg}").unwrap(),
+            );
             bar.set_message("Finding shortest paths");
-            let paths = shortest_path(starting, &g)?;
+            bar.set_length(5);
+            let mut paths = [
+                Drugs::OGKush,
+                Drugs::SourDiesel,
+                Drugs::GreenCrack,
+                Drugs::GranddaddyPurple,
+                Drugs::Meth,
+            ]
+            .iter()
+            .progress_with(bar.clone())
+            .copied()
+            .map(|d| shortest_path(inherent_effects(d), &g))
+            .collect::<Vec<_>>();
+
+            let meth_cocaine = paths.pop().expect("should not be empty");
+            let granddaddy_purple = paths.pop().expect("should not be empty");
+            let green_crack = paths.pop().expect("should not be empty");
+            let sour_diesel = paths.pop().expect("should not be empty");
+            let kush = paths.pop().expect("should not be empty");
+
+            bar.set_style(ProgressStyle::default_spinner());
+            bar.set_message("Computing price multipliers");
+            let price_multipliers = (0..encoder.maximum_index())
+                .map(|idx| rules.price_multiplier(Effects::from(encoder.decode(idx))))
+                .collect::<Vec<_>>();
+
+            let paths = FlattenedResultsFile {
+                price_multipliers,
+                kush,
+                sour_diesel,
+                green_crack,
+                granddaddy_purple,
+                meth_cocaine,
+            };
+
             bar.set_message("Serializing shortest paths");
-            savefile::save(&mut output_file, SHORTEST_PATH_VERSION, &paths)?;
+            savefile::save(&mut writer, SHORTEST_PATH_VERSION, &paths)?;
             bar.finish_and_clear();
             Ok(())
         }
@@ -345,144 +324,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!();
                 }
             }
-            Ok(())
-        }
-        Command::Migrate {
-            kush,
-            diesel,
-            green_crack,
-            purple,
-            meth_coke,
-            output,
-        } => {
-            let bar = ProgressBar::new_spinner();
-            bar.enable_steady_tick(Duration::from_millis(100));
-
-            let mut out = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&output)?;
-
-            bar.set_message("Loading kush routes");
-            let kush = savefile::load_file::<ShortestPaths, _>(kush, SHORTEST_PATH_VERSION)?.paths;
-
-            bar.set_message("Loading diesel routes");
-            let sour_diesel =
-                savefile::load_file::<ShortestPaths, _>(diesel, SHORTEST_PATH_VERSION)?.paths;
-
-            bar.set_message("Loading green crack routes");
-            let green_crack =
-                savefile::load_file::<ShortestPaths, _>(green_crack, SHORTEST_PATH_VERSION)?.paths;
-
-            bar.set_message("Loading purple routes");
-            let granddaddy_purple =
-                savefile::load_file::<ShortestPaths, _>(purple, SHORTEST_PATH_VERSION)?.paths;
-
-            bar.set_message("Loading meth/cocaine routes");
-            let meth_cocaine =
-                savefile::load_file::<ShortestPaths, _>(meth_coke, SHORTEST_PATH_VERSION)?.paths;
-
-            bar.set_message("Computing price multipliers");
-            let price_multipliers = (0..encoder.maximum_index())
-                .map(|idx| rules.price_multiplier(Effects::from(encoder.decode(idx))))
-                .collect::<Vec<_>>();
-
-            let all_results = ResultsFile {
-                price_multipliers,
-                kush,
-                sour_diesel,
-                green_crack,
-                granddaddy_purple,
-                meth_cocaine,
-            };
-
-            bar.set_message("Serializing results");
-            match output
-                .extension()
-                .map(|ext| ext.to_string_lossy())
-                .as_deref()
-            {
-                Some("json") => serde_json::to_writer_pretty(&mut out, &all_results)?,
-                Some("msgp") => rmp_serde::encode::write(&mut out, &all_results)?,
-                _ => savefile::save(&mut out, SHORTEST_PATH_VERSION, &all_results)?,
-            };
-            bar.finish_and_clear();
-            Ok(())
-        }
-        Command::MigrateFlat {
-            kush,
-            diesel,
-            green_crack,
-            purple,
-            meth_coke,
-            output,
-        } => {
-            let bar = ProgressBar::new_spinner();
-            bar.enable_steady_tick(Duration::from_millis(100));
-
-            let out = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&output)?;
-            let mut writer = BufWriter::new(out);
-
-            bar.set_message("Loading kush routes");
-            let kush = savefile::load_file::<ShortestPaths, _>(kush, SHORTEST_PATH_VERSION)?
-                .paths
-                .into();
-
-            bar.set_message("Loading diesel routes");
-            let sour_diesel =
-                savefile::load_file::<ShortestPaths, _>(diesel, SHORTEST_PATH_VERSION)?
-                    .paths
-                    .into();
-
-            bar.set_message("Loading green crack routes");
-            let green_crack =
-                savefile::load_file::<ShortestPaths, _>(green_crack, SHORTEST_PATH_VERSION)?
-                    .paths
-                    .into();
-
-            bar.set_message("Loading purple routes");
-            let granddaddy_purple =
-                savefile::load_file::<ShortestPaths, _>(purple, SHORTEST_PATH_VERSION)?
-                    .paths
-                    .into();
-
-            bar.set_message("Loading meth/cocaine routes");
-            let meth_cocaine =
-                savefile::load_file::<ShortestPaths, _>(meth_coke, SHORTEST_PATH_VERSION)?
-                    .paths
-                    .into();
-
-            bar.set_message("Computing price multipliers");
-            let price_multipliers = (0..encoder.maximum_index())
-                .map(|idx| rules.price_multiplier(Effects::from(encoder.decode(idx))))
-                .collect::<Vec<_>>();
-
-            let all_results = FlattenedResultsFile {
-                price_multipliers,
-                kush,
-                sour_diesel,
-                green_crack,
-                granddaddy_purple,
-                meth_cocaine,
-            };
-
-            bar.set_message("Serializing results");
-            match output
-                .extension()
-                .map(|ext| ext.to_string_lossy())
-                .as_deref()
-            {
-                Some("json") => serde_json::to_writer_pretty(&mut writer, &all_results)?,
-                Some("msgp") => rmp_serde::encode::write(&mut writer, &all_results)?,
-                _ => savefile::save(&mut writer, SHORTEST_PATH_VERSION, &all_results)?,
-            };
-            writer.flush()?;
-            bar.finish_and_clear();
             Ok(())
         }
     }
