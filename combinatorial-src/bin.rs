@@ -11,13 +11,14 @@ use schedule1::flat_storage::FlatStorage;
 use schedule1::mixing::{
     inherent_effects, parse_rules_file, Drugs, Effects, MixtureRules, Substance, SUBSTANCES,
 };
-use schedule1::search::substance_cost;
+use schedule1::search::{base_price, substance_cost};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use topset::TopSet;
 
 type FlatPaths = FlatStorage<Label>;
 
@@ -61,6 +62,18 @@ enum Command {
         effects: String,
         #[arg(long, default_value_t = false)]
         exact: bool,
+    },
+    Profit {
+        #[arg(long)]
+        routes: PathBuf,
+        #[arg(long)]
+        max_mixins: Option<u32>,
+        #[arg(long, default_value_t = 0.)]
+        markup: f64,
+        #[arg(long, default_value_t = 999)]
+        max_price: u32,
+        #[arg(long, default_value_t = 10)]
+        max_results: usize,
     },
 }
 
@@ -282,6 +295,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 })
                 .collect::<Vec<_>>()
                 {
+                    bar.finish_and_clear();
                     println!("{drug:?}");
                     for (title, (idx, label)) in
                         [("Lowest Cost", lowest_cost), ("Shortest", shortest)]
@@ -297,6 +311,64 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                     println!();
                 }
+            }
+            Ok(())
+        }
+        Command::Profit {
+            routes,
+            max_mixins,
+            markup,
+            max_price,
+            max_results,
+        } => {
+            let shortest_paths: FlattenedResultsFile =
+                savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
+
+            let max_mixins = max_mixins.unwrap_or(999);
+
+            for (drug, fp, results) in [
+                (Drugs::OGKush, &shortest_paths.kush),
+                (Drugs::SourDiesel, &shortest_paths.sour_diesel),
+                (Drugs::GreenCrack, &shortest_paths.green_crack),
+                (Drugs::GranddaddyPurple, &shortest_paths.granddaddy_purple),
+                (Drugs::Meth, &shortest_paths.meth_cocaine),
+                (Drugs::Cocaine, &shortest_paths.meth_cocaine),
+            ]
+            .par_iter()
+            .copied()
+            .map(|(d, fp)| {
+                let mut top = TopSet::new(max_results, PartialOrd::gt);
+                let base_price = base_price(d) * (1. + markup);
+                for idx in 0..encoder.maximum_index() as usize {
+                    let mult = shortest_paths.price_multipliers[idx];
+                    let best = fp
+                        .get(idx)
+                        .iter()
+                        .filter(|label| label.length <= max_mixins)
+                        .min_by_key(|l| l.cost);
+                    if let Some(best) = best {
+                        let sell_price = max_price.min((base_price * mult).round() as u32) as i32;
+                        let profit = sell_price - best.cost as i32;
+                        top.insert((profit, sell_price, idx, best));
+                    }
+                }
+
+                (d, fp, top)
+            })
+            .collect::<Vec<_>>()
+            {
+                let mut results = results.into_sorted_vec();
+                results.reverse();
+                println!("{drug}");
+                for (profit, sell_price, idx, label) in results {
+                    let path = trace_path(*label, fp);
+                    println!(
+                        "{:?}\n  Sell Price: {sell_price}\n  Cost: {}\n  Profit: {profit}\n  Ingredients: {path:?}\n",
+                        Effects::from(encoder.decode(idx as u32)),
+                        label.cost,
+                    );
+                }
+                println!();
             }
             Ok(())
         }
