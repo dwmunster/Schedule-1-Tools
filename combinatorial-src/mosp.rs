@@ -6,13 +6,14 @@ use priority_queue::PriorityQueue;
 use savefile_derive::Savefile;
 use schedule1::effect_graph::EffectGraph;
 use schedule1::mixing::{Effects, Substance, SUBSTANCES};
+use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, Reverse};
 
 type EffectIndex = u32;
 type Cost = u32;
 type PathLength = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Savefile)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Savefile, Serialize, Deserialize)]
 pub struct Label {
     pub length: PathLength,
     pub cost: Cost,

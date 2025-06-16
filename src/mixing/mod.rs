@@ -143,7 +143,9 @@ pub const SUBSTANCES: &[Substance] = &[
     Substance::Battery,
 ];
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize, Savefile,
+)]
 #[repr(u8)]
 pub enum Drugs {
     OGKush,

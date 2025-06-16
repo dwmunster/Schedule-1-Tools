@@ -2,3 +2,4 @@
 pareto_db*
 .jj
 *.data
+*.msgp

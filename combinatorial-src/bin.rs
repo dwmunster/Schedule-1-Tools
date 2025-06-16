@@ -2,13 +2,13 @@ mod mosp;
 
 use crate::mosp::{multiobjective_shortest_path, Label};
 use clap::Parser;
-use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::ProgressBar;
 use savefile_derive::Savefile;
 use schedule1::combinatorial::CombinatorialEncoder;
 use schedule1::effect_graph::{EffectGraph, GRAPH_VERSION};
 use schedule1::mixing::{parse_rules_file, Effects, MixtureRules, Substance, SUBSTANCES};
 use schedule1::search::substance_cost;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -17,6 +17,16 @@ use std::time::Duration;
 #[derive(Savefile)]
 struct ShortestPaths {
     paths: Vec<Vec<Label>>,
+}
+
+#[derive(Savefile, Serialize, Deserialize)]
+struct ResultsFile {
+    price_multipliers: Vec<f64>,
+    kush: Vec<Vec<Label>>,
+    sour_diesel: Vec<Vec<Label>>,
+    green_crack: Vec<Vec<Label>>,
+    granddaddy_purple: Vec<Vec<Label>>,
+    meth_cocaine: Vec<Vec<Label>>,
 }
 
 const SHORTEST_PATH_VERSION: u32 = 1;
@@ -51,6 +61,25 @@ enum Command {
         effects: String,
         #[arg(long, default_value_t = false)]
         exact: bool,
+    },
+    Migrate {
+        #[arg(long)]
+        kush: PathBuf,
+
+        #[arg(long)]
+        diesel: PathBuf,
+
+        #[arg(long)]
+        green_crack: PathBuf,
+
+        #[arg(long)]
+        purple: PathBuf,
+
+        #[arg(long)]
+        meth_coke: PathBuf,
+
+        #[arg(long)]
+        output: PathBuf,
     },
 }
 
@@ -89,7 +118,7 @@ fn shortest_path<const N: u8, const K: u8>(
 
 fn trace_path(start: Label, paths: &[Vec<Label>]) -> Vec<Substance> {
     let mut path = Vec::with_capacity(start.length as usize);
-    let mut l = start.clone();
+    let mut l = start;
     while let Some((next, s)) = l.previous {
         path.push(s);
         l = *paths[next as usize]
@@ -115,6 +144,34 @@ fn search_exact<const N: u8, const K: u8>(
     }
 
     paths
+}
+
+fn search_inexact<const N: u8, const K: u8>(
+    target_effects: Effects,
+    encoder: &CombinatorialEncoder<N, K>,
+    labels: &ShortestPaths,
+) -> Option<((usize, Label), (usize, Label))> {
+    let mut lowest_cost = None;
+    let mut shortest = None;
+    for (idx, paths) in labels.paths.iter().enumerate() {
+        // only consider reachable effects
+        if paths.is_empty() {
+            continue;
+        }
+        let current_effects = Effects::from(encoder.decode(idx as u32));
+        if !current_effects.contains(target_effects) {
+            continue;
+        }
+        for path in paths {
+            if path.cost < lowest_cost.get_or_insert((idx, *path)).1.cost {
+                lowest_cost = Some((idx, *path));
+            }
+            if path.length < shortest.get_or_insert((idx, *path)).1.length {
+                shortest = Some((idx, *path));
+            }
+        }
+    }
+    lowest_cost.and_then(|(idx, path)| Some(((idx, path), shortest.unwrap())))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -176,40 +233,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                     println!("cost: {cost}, length: {}, substances: {path:?}", path.len());
                 }
             } else {
-                bar.set_style(
-                    ProgressStyle::with_template(
-                        "{wide_bar} {human_pos} / {human_len}\n{wide_msg}",
-                    )
-                    .unwrap(),
-                );
                 bar.set_message("Searching for matching routes");
                 bar.set_length(shortest_paths.paths.len() as u64);
-                let mut lowest_cost = None;
-                let mut shortest = None;
-                for (idx, paths) in shortest_paths.paths.iter().enumerate().progress_with(bar) {
-                    // only consider reachable effects
-                    if paths.is_empty() {
-                        continue;
-                    }
-                    let current_effects = Effects::from(encoder.decode(idx as u32));
-                    if !current_effects.contains(target_effects) {
-                        continue;
-                    }
-                    for path in paths {
-                        if path.cost < lowest_cost.get_or_insert((idx, *path)).1.cost {
-                            lowest_cost = Some((idx, *path));
-                        }
-                        if path.length < shortest.get_or_insert((idx, *path)).1.length {
-                            shortest = Some((idx, *path));
-                        }
-                    }
-                }
-                if lowest_cost.is_none() || shortest.is_none() {
+
+                let Some((lowest_cost, shortest)) =
+                    search_inexact(target_effects, &encoder, &shortest_paths)
+                else {
+                    bar.finish_and_clear();
                     println!("No matching routes");
                     return Ok(());
-                }
-                let lowest_cost = lowest_cost.unwrap();
-                let shortest = shortest.unwrap();
+                };
+                bar.finish_and_clear();
 
                 for (title, (idx, label)) in [("Lowest Cost", lowest_cost), ("Shortest", shortest)]
                 {
@@ -223,6 +257,69 @@ fn main() -> Result<(), Box<dyn Error>> {
                     )
                 }
             }
+            Ok(())
+        }
+        Command::Migrate {
+            kush,
+            diesel,
+            green_crack,
+            purple,
+            meth_coke,
+            output,
+        } => {
+            let bar = ProgressBar::new_spinner();
+            bar.enable_steady_tick(Duration::from_millis(100));
+
+            let mut out = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&output)?;
+
+            bar.set_message("Loading kush routes");
+            let kush = savefile::load_file::<ShortestPaths, _>(kush, SHORTEST_PATH_VERSION)?.paths;
+
+            bar.set_message("Loading diesel routes");
+            let sour_diesel =
+                savefile::load_file::<ShortestPaths, _>(diesel, SHORTEST_PATH_VERSION)?.paths;
+
+            bar.set_message("Loading green crack routes");
+            let green_crack =
+                savefile::load_file::<ShortestPaths, _>(green_crack, SHORTEST_PATH_VERSION)?.paths;
+
+            bar.set_message("Loading purple routes");
+            let granddaddy_purple =
+                savefile::load_file::<ShortestPaths, _>(purple, SHORTEST_PATH_VERSION)?.paths;
+
+            bar.set_message("Loading meth/cocaine routes");
+            let meth_cocaine =
+                savefile::load_file::<ShortestPaths, _>(meth_coke, SHORTEST_PATH_VERSION)?.paths;
+
+            bar.set_message("Computing price multipliers");
+            let price_multipliers = (0..encoder.maximum_index())
+                .map(|idx| rules.price_multiplier(Effects::from(encoder.decode(idx))))
+                .collect::<Vec<_>>();
+
+            let all_results = ResultsFile {
+                price_multipliers,
+                kush,
+                sour_diesel,
+                green_crack,
+                granddaddy_purple,
+                meth_cocaine,
+            };
+
+            bar.set_message("Serializing results");
+            match output
+                .extension()
+                .map(|ext| ext.to_string_lossy())
+                .as_deref()
+            {
+                Some("json") => serde_json::to_writer_pretty(&mut out, &all_results)?,
+                Some("msgp") => rmp_serde::encode::write(&mut out, &all_results)?,
+                _ => savefile::save(&mut out, SHORTEST_PATH_VERSION, &all_results)?,
+            };
+            bar.finish_and_clear();
             Ok(())
         }
     }

@@ -1,4 +1,5 @@
 use savefile_derive::Savefile;
+use serde::{Deserialize, Serialize};
 
 /// The Combinatorial Encoder uses a combinatorial number system to uniquely identify a particular
 /// combination of K elements out of a set of N possibilities using a single integer. This mapping
@@ -17,7 +18,7 @@ use savefile_derive::Savefile;
 ///
 /// We assume that the combination is represented as bitflags within a `u64` and provide methods for
 /// _encoding_ (combination -> index) and _decoding_ (index -> combination).
-#[derive(Savefile)]
+#[derive(Savefile, Serialize, Deserialize)]
 pub struct CombinatorialEncoder<const N: u8, const MAX_K: u8> {
     /// Binomial coefficients (i.e., Pascal's triangle) stored in column-major order
     binom: Vec<u32>,
