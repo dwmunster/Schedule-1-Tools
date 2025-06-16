@@ -1,4 +1,5 @@
 use crate::combinatorial::CombinatorialEncoder;
+use crate::flat_storage::FlatStorage;
 use crate::mixing::{Effects, MixtureRules, Substance, SUBSTANCES};
 use savefile::SavefileError;
 use savefile_derive::Savefile;
@@ -11,7 +12,7 @@ pub const GRAPH_VERSION: u32 = 1;
 #[derive(Savefile)]
 pub struct EffectGraph<const N: u8, const K: u8> {
     successors: Vec<[EffectIndex; SUBSTANCES.len()]>,
-    predecessors: Vec<Vec<EffectIndex>>,
+    predecessors: FlatStorage<EffectIndex>,
     encoder: CombinatorialEncoder<N, K>,
 }
 
@@ -41,6 +42,8 @@ impl<const N: u8, const K: u8> EffectGraph<N, K> {
             }
         }
 
+        let predecessors = predecessors.into();
+
         Self {
             successors,
             predecessors,
@@ -69,14 +72,14 @@ impl<const N: u8, const K: u8> EffectGraph<N, K> {
     }
 
     pub fn predecessors(&self, id: EffectIndex) -> &[EffectIndex] {
-        &self.predecessors[id as usize]
+        self.predecessors.get(id as usize)
     }
 
     pub fn predecessors_with_substances(
         &self,
         id: EffectIndex,
     ) -> impl Iterator<Item = (EffectIndex, Substance)> + use<'_, N, K> {
-        self.predecessors[id as usize].iter().map(move |n| {
+        self.predecessors.get(id as usize).iter().map(move |n| {
             (
                 *n,
                 SUBSTANCES[self.successors[*n as usize]

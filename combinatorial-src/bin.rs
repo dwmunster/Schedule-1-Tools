@@ -7,6 +7,7 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use savefile_derive::Savefile;
 use schedule1::combinatorial::CombinatorialEncoder;
 use schedule1::effect_graph::{EffectGraph, GRAPH_VERSION};
+use schedule1::flat_storage::FlatStorage;
 use schedule1::mixing::{
     inherent_effects, parse_rules_file, Drugs, Effects, MixtureRules, Substance, SUBSTANCES,
 };
@@ -14,40 +15,11 @@ use schedule1::search::substance_cost;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-#[derive(Savefile, Serialize, Deserialize)]
-struct FlatPaths {
-    paths: Vec<Label>,
-    offsets: Vec<usize>,
-}
-
-impl From<Vec<Vec<Label>>> for FlatPaths {
-    fn from(ragged: Vec<Vec<Label>>) -> Self {
-        let num_elem = ragged.len();
-        let num_paths = ragged.iter().map(|p| p.len()).sum();
-
-        let mut paths = Vec::with_capacity(num_paths);
-        let mut offsets = vec![0; num_elem + 1];
-
-        for (idx, path) in ragged.into_iter().enumerate() {
-            offsets[idx + 1] = offsets[idx] + path.len();
-            paths.extend(path)
-        }
-
-        Self { paths, offsets }
-    }
-}
-
-impl FlatPaths {
-    pub fn get(&self, idx: usize) -> &[Label] {
-        let offset = self.offsets[idx];
-        let length = self.offsets[idx + 1] - offset;
-        &self.paths[offset..offset + length]
-    }
-}
+type FlatPaths = FlatStorage<Label>;
 
 #[derive(Savefile, Serialize, Deserialize)]
 struct FlattenedResultsFile {
@@ -108,7 +80,8 @@ fn generate<const N: u8, const K: u8>(
         .open(graph_path)?;
     let mut writer = BufWriter::new(file);
     let g = EffectGraph::new(rules, encoder);
-    g.serialize(&mut writer).map_err(Into::into)
+    g.serialize(&mut writer)?;
+    writer.flush().map_err(Into::into)
 }
 
 fn shortest_path<const N: u8, const K: u8>(
@@ -252,6 +225,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             bar.set_message("Serializing shortest paths");
             savefile::save(&mut writer, SHORTEST_PATH_VERSION, &paths)?;
+            writer.flush()?;
             bar.finish_and_clear();
             Ok(())
         }
