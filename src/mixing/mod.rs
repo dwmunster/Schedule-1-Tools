@@ -10,8 +10,8 @@ use std::io::BufReader;
 use std::path::Path;
 use topological_sort::TopologicalSort;
 
-pub const MAX_EFFECTS: u32 = 8;
-pub const NUM_EFFECTS: usize = 34;
+pub const MAX_EFFECTS: u8 = 8;
+pub const NUM_EFFECTS: u8 = 34;
 
 bitflags! {
     #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Serialize, Deserialize)]
@@ -237,7 +237,7 @@ struct RulesFile {
 pub struct MixtureRules {
     replacement_rules: [Vec<Rule>; SUBSTANCES.len()],
     inherent_effects: [Effects; SUBSTANCES.len()],
-    price_mults: [f64; NUM_EFFECTS],
+    price_mults: [f64; NUM_EFFECTS as usize],
 }
 
 impl MixtureRules {
@@ -254,7 +254,7 @@ impl MixtureRules {
         }
 
         let n_effects = effects.bits().count_ones();
-        if n_effects < MAX_EFFECTS {
+        if n_effects < MAX_EFFECTS as u32 {
             effects.insert(inherent_effects);
         }
         effects
@@ -268,7 +268,7 @@ impl MixtureRules {
         let e = effects.bits();
         for i in 0..NUM_EFFECTS {
             if e & (1 << i) != 0 {
-                multiplier += self.price_mults[i];
+                multiplier += self.price_mults[i as usize];
             }
         }
 
@@ -357,7 +357,7 @@ pub fn parse_rules_file<P: AsRef<Path>>(
     }
 
     // Convert effect price mapping
-    let mut price_mults = [0.; NUM_EFFECTS];
+    let mut price_mults = [0.; NUM_EFFECTS as usize];
     for (effect_string, price_string) in &rules_file.effect_price {
         let effect = string_to_effect(effect_string);
         let idx = effect.bits().ilog2();

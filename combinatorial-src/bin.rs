@@ -9,10 +9,12 @@ use schedule1::combinatorial::CombinatorialEncoder;
 use schedule1::effect_graph::{EffectGraph, GRAPH_VERSION};
 use schedule1::flat_storage::FlatStorage;
 use schedule1::mixing::{
-    inherent_effects, parse_rules_file, Drugs, Effects, MixtureRules, Substance, SUBSTANCES,
+    inherent_effects, parse_rules_file, Drugs, Effects, MixtureRules, Substance, MAX_EFFECTS,
+    NUM_EFFECTS, SUBSTANCES,
 };
 use schedule1::search::{base_price, substance_cost};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -60,8 +62,14 @@ enum Command {
         routes: PathBuf,
         #[arg(long)]
         effects: String,
-        #[arg(long, default_value_t = false)]
-        exact: bool,
+    },
+    Lookup {
+        #[arg(long)]
+        routes: PathBuf,
+        #[arg(long, conflicts_with = "index")]
+        effects: Option<String>,
+        #[arg(long)]
+        index: Option<u32>,
     },
     Profit {
         #[arg(long)]
@@ -74,6 +82,13 @@ enum Command {
         max_price: u32,
         #[arg(long, default_value_t = 10)]
         max_results: usize,
+    },
+    Metadata {
+        #[arg(long)]
+        graph: Option<PathBuf>,
+
+        #[arg(long)]
+        routes: Option<PathBuf>,
     },
 }
 
@@ -126,12 +141,8 @@ fn trace_path(start: Label, paths: &FlatPaths) -> Vec<Substance> {
     path
 }
 
-fn search_exact<const N: u8, const K: u8>(
-    effects: Effects,
-    encoder: &CombinatorialEncoder<N, K>,
-    labels: &FlatPaths,
-) -> Vec<Vec<Substance>> {
-    let starting_labels = labels.get(encoder.encode(effects.bits()) as usize);
+fn lookup(index: u32, labels: &FlatPaths) -> Vec<Vec<Substance>> {
+    let starting_labels = labels.get(index as usize);
     let mut paths = Vec::with_capacity(starting_labels.len());
     for potential_path in starting_labels {
         let path = trace_path(*potential_path, labels);
@@ -170,11 +181,70 @@ fn search_inexact<const N: u8, const K: u8>(
     lowest_cost.map(|(idx, path)| ((idx, path), shortest.unwrap()))
 }
 
+fn graph_metadata<const N: u8, const K: u8>(graph: &EffectGraph<N, K>) {
+    println!("---------\nGraph metadata:");
+    println!(
+        "size_of::<EffectGraph<N, K>>() = {}",
+        size_of::<EffectGraph<N, K>>()
+    );
+
+    let num_nodes = graph.num_nodes();
+    println!("Number of nodes = {}", num_nodes);
+
+    let backlinks: usize = (0..num_nodes)
+        .map(|idx| graph.predecessors(idx as u32).len())
+        .sum();
+    println!("Number of backlinks = {}", backlinks);
+    println!();
+}
+
+fn routes_metadata(routes: &FlattenedResultsFile) {
+    println!("---------\nRoute metadata:");
+    println!("size_of::<Label>() = {}", size_of::<Label>());
+    let num_nodes = routes.price_multipliers.len();
+    for (title, paths) in [
+        ("Kush", &routes.kush),
+        ("Sour Diesel", &routes.sour_diesel),
+        ("Green Crack", &routes.green_crack),
+        ("GDP", &routes.granddaddy_purple),
+        ("Meth/Cocaine", &routes.meth_cocaine),
+    ] {
+        let mut total = 0usize;
+        let mut counts: HashMap<usize, usize> = HashMap::new();
+        let mut lengths: HashMap<u32, usize> = HashMap::new();
+
+        let mut longest = TopSet::new(5, PartialOrd::gt);
+
+        for idx in 0..num_nodes {
+            let labels = paths.get(idx);
+            let l = labels.len();
+            total += l;
+            *counts.entry(l).or_insert(0) += 1;
+
+            if let Some(l) = labels.iter().min_by_key(|l| l.length) {
+                *lengths.entry(l.length).or_insert(0) += 1;
+                longest.insert((l.length, idx));
+            }
+        }
+
+        let mut counts = counts.into_iter().collect::<Vec<_>>();
+        counts.sort();
+        println!("{title}:\n  Number of labels: {total}\n  Counts: {counts:?}");
+
+        let mut lengths = lengths.into_iter().collect::<Vec<_>>();
+        lengths.sort();
+        println!("  Minimum Lengths: {lengths:?}");
+
+        let mut longest = longest.into_sorted_vec();
+        longest.reverse();
+        println!("  Longest Minimum Lengths: {longest:?}");
+    }
+}
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     let rules = parse_rules_file(args.rules)?;
-    let encoder = CombinatorialEncoder::<34, 8>::new();
+    let encoder = CombinatorialEncoder::<NUM_EFFECTS, MAX_EFFECTS>::new();
 
     match args.command {
         Command::Generate { graph } => {
@@ -195,7 +265,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
             bar.set_message("Loading graph");
-            let g: EffectGraph<34, 8> = savefile::load_file(graph, GRAPH_VERSION)?;
+            let g: EffectGraph<NUM_EFFECTS, MAX_EFFECTS> =
+                savefile::load_file(graph, GRAPH_VERSION)?;
 
             bar.set_style(
                 ProgressStyle::with_template("{wide_bar} {pos}/{len}\n{wide_msg}").unwrap(),
@@ -242,11 +313,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             bar.finish_and_clear();
             Ok(())
         }
-        Command::Search {
-            routes,
-            effects,
-            exact,
-        } => {
+        Command::Search { routes, effects } => {
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
 
@@ -256,62 +323,86 @@ fn main() -> Result<(), Box<dyn Error>> {
             let target_effects =
                 bitflags::parser::from_str_strict(&effects).map_err(|e| e.to_string())?;
             bar.set_message("Searching for matching routes");
-            if exact {
-                for (drug, paths) in [
-                    (Drugs::OGKush, &shortest_paths.kush),
-                    (Drugs::SourDiesel, &shortest_paths.sour_diesel),
-                    (Drugs::GreenCrack, &shortest_paths.green_crack),
-                    (Drugs::GranddaddyPurple, &shortest_paths.granddaddy_purple),
-                    (Drugs::Meth, &shortest_paths.meth_cocaine),
-                ]
-                .iter()
-                .map(|(d, fp)| (d, search_exact(target_effects, &encoder, fp)))
-                .collect::<Vec<_>>()
-                {
-                    println!("{drug:?}");
-                    for path in paths {
-                        let cost: i64 = path.iter().copied().map(substance_cost).sum();
-                        println!(
-                            "  cost: {cost}, length: {}, substances: {path:?}",
-                            path.len()
-                        );
-                    }
-                    println!();
-                }
 
+            bar.set_message("Searching for matching routes");
+            for (drug, (lowest_cost, shortest), paths) in [
+                (Drugs::OGKush, &shortest_paths.kush),
+                (Drugs::SourDiesel, &shortest_paths.sour_diesel),
+                (Drugs::GreenCrack, &shortest_paths.green_crack),
+                (Drugs::GranddaddyPurple, &shortest_paths.granddaddy_purple),
+                (Drugs::Meth, &shortest_paths.meth_cocaine),
+            ]
+            .par_iter()
+            .filter_map(|(d, fp)| {
+                search_inexact(target_effects, &encoder, &fp).map(|p| (*d, p, *fp))
+            })
+            .collect::<Vec<_>>()
+            {
                 bar.finish_and_clear();
-            } else {
-                bar.set_message("Searching for matching routes");
-                for (drug, (lowest_cost, shortest), paths) in [
-                    (Drugs::OGKush, &shortest_paths.kush),
-                    (Drugs::SourDiesel, &shortest_paths.sour_diesel),
-                    (Drugs::GreenCrack, &shortest_paths.green_crack),
-                    (Drugs::GranddaddyPurple, &shortest_paths.granddaddy_purple),
-                    (Drugs::Meth, &shortest_paths.meth_cocaine),
-                ]
-                .par_iter()
-                .filter_map(|(d, fp)| {
-                    search_inexact(target_effects, &encoder, &fp).map(|p| (*d, p, *fp))
-                })
-                .collect::<Vec<_>>()
+                println!("{drug:?}");
+                for (title, (idx, label)) in [("Lowest Cost", lowest_cost), ("Shortest", shortest)]
                 {
-                    bar.finish_and_clear();
-                    println!("{drug:?}");
-                    for (title, (idx, label)) in
-                        [("Lowest Cost", lowest_cost), ("Shortest", shortest)]
-                    {
-                        let p = trace_path(label, paths);
-                        println!(
+                    let p = trace_path(label, paths);
+                    println!(
                             "  {title}:\n    Effects: {:?}\n    Cost: {}\n    Length: {}\n    Path: {:?}",
                             Effects::from(encoder.decode(idx as u32)),
                             label.cost,
                             label.length,
                             p
                         )
-                    }
-                    println!();
                 }
+                println!();
             }
+
+            Ok(())
+        }
+        Command::Lookup {
+            routes,
+            effects,
+            index,
+        } => {
+            let bar = ProgressBar::new_spinner();
+            bar.enable_steady_tick(Duration::from_millis(100));
+
+            bar.set_message("Loading routes");
+            let shortest_paths: FlattenedResultsFile =
+                savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
+
+            let index = match (index, effects) {
+                (Some(i), _) => i,
+                (None, Some(e)) => {
+                    let effects: Effects =
+                        bitflags::parser::from_str_strict(&e).map_err(|e| e.to_string())?;
+                    encoder.encode(effects.bits())
+                }
+                _ => panic!("index and effects cannot both be None"),
+            };
+
+            println!("Effects: {:?}", Effects::from(encoder.decode(index)));
+
+            for (drug, paths) in [
+                (Drugs::OGKush, &shortest_paths.kush),
+                (Drugs::SourDiesel, &shortest_paths.sour_diesel),
+                (Drugs::GreenCrack, &shortest_paths.green_crack),
+                (Drugs::GranddaddyPurple, &shortest_paths.granddaddy_purple),
+                (Drugs::Meth, &shortest_paths.meth_cocaine),
+            ]
+            .iter()
+            .map(|(d, fp)| (d, lookup(index, fp)))
+            .collect::<Vec<_>>()
+            {
+                println!("{drug:?}");
+                for path in paths {
+                    let cost: i64 = path.iter().copied().map(substance_cost).sum();
+                    println!(
+                        "  cost: {cost}, length: {}, substances: {path:?}",
+                        path.len()
+                    );
+                }
+                println!();
+            }
+
+            bar.finish_and_clear();
             Ok(())
         }
         Command::Profit {
@@ -369,6 +460,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                 }
                 println!();
+            }
+            Ok(())
+        }
+        Command::Metadata { graph, routes } => {
+            if let Some(g) = graph {
+                let graph: EffectGraph<NUM_EFFECTS, MAX_EFFECTS> =
+                    savefile::load_file(g, GRAPH_VERSION)?;
+                graph_metadata(&graph);
+            }
+            if let Some(r) = routes {
+                let routes = savefile::load_file(r, SHORTEST_PATH_VERSION)?;
+                routes_metadata(&routes);
             }
             Ok(())
         }
