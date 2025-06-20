@@ -2,10 +2,10 @@
 //! Sedeño-Noda, Borndörfer. An Improved Multiobjective Shortest Path Algorithm. Computers and
 //! Operations Research 135 (2021).
 
+use crate::effect_graph::EffectGraph;
+use crate::mixing::{Effects, Substance, SUBSTANCES};
 use priority_queue::PriorityQueue;
 use savefile_derive::Savefile;
-use schedule1::effect_graph::EffectGraph;
-use schedule1::mixing::{Effects, Substance, SUBSTANCES};
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, Reverse};
 

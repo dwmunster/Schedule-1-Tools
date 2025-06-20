@@ -1,4 +1,3 @@
-use crate::packing::Packable;
 use bitflags::bitflags;
 use savefile_derive::Savefile;
 use serde::{Deserialize, Serialize};
@@ -115,12 +114,6 @@ impl From<u8> for Substance {
 impl From<Substance> for u8 {
     fn from(value: Substance) -> u8 {
         value as u8
-    }
-}
-
-impl Packable for Substance {
-    fn max_value() -> u8 {
-        16 // 2^4 = 16 possible values
     }
 }
 
@@ -529,5 +522,34 @@ mod tests {
         assert_eq!(price, 657);
 
         Ok(())
+    }
+}
+
+pub fn base_price(drug: Drugs) -> f64 {
+    match drug {
+        Drugs::OGKush | Drugs::SourDiesel | Drugs::GreenCrack | Drugs::GranddaddyPurple => 35.0,
+        Drugs::Meth => 70.0,
+        Drugs::Cocaine => 150.0,
+    }
+}
+
+pub fn substance_cost(substance: Substance) -> i64 {
+    match substance {
+        Substance::Cuke => 2,
+        Substance::Banana => 2,
+        Substance::Paracetamol => 3,
+        Substance::Donut => 3,
+        Substance::Viagra => 4,
+        Substance::MouthWash => 4,
+        Substance::FluMedicine => 5,
+        Substance::Gasoline => 5,
+        Substance::EnergyDrink => 6,
+        Substance::MotorOil => 6,
+        Substance::MegaBean => 7,
+        Substance::Chili => 7,
+        Substance::Battery => 8,
+        Substance::Iodine => 8,
+        Substance::Addy => 9,
+        Substance::HorseSemen => 9,
     }
 }

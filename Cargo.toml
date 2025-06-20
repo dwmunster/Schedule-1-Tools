@@ -11,14 +11,10 @@ path = "src/lib.rs"
 name = "schedule1-mixing-tool"
 path = "src/bin.rs"
 
-[[bin]]
-name = "schedule1-combinatorial-tool"
-path = "combinatorial-src/bin.rs"
 
 [dependencies]
 bitflags = { features = ["serde"], version = "2.9.0" }
 clap = { version = "4.5.36", features = ["derive"] }
-fnv = "1.0.7"
 indicatif = "0.17.11"
 priority-queue = "2.5.0"
 rayon = "1.10.0"
@@ -34,9 +30,6 @@ criterion = "0.3"
 wide = "0.7.32"
 bytemuck = "1.23.1"
 
-[[bench]]
-name = "searches"
-harness = false
 
 [[bench]]
 name = "graph"
