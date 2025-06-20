@@ -9,7 +9,7 @@ use schedule1::mixing::{
     base_price, inherent_effects, parse_rules_file, substance_cost, Drugs, Effects, MixtureRules,
     Substance, MAX_EFFECTS, NUM_EFFECTS, SUBSTANCES,
 };
-use schedule1::mosp::{multiobjective_shortest_path, Label};
+use schedule1::mosp::{multiobjective_shortest_path, Cost, EffectIndex, Label, PathLength};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
@@ -23,7 +23,7 @@ type FlatPaths = FlatStorage<Label>;
 
 #[derive(Savefile, Serialize, Deserialize)]
 struct FlattenedResultsFile {
-    price_multipliers: Vec<f64>,
+    price_multipliers: Vec<u16>,
     kush: FlatPaths,
     sour_diesel: FlatPaths,
     green_crack: FlatPaths,
@@ -31,7 +31,7 @@ struct FlattenedResultsFile {
     meth_cocaine: FlatPaths,
 }
 
-const SHORTEST_PATH_VERSION: u32 = 1;
+const SHORTEST_PATH_VERSION: u32 = 3;
 
 #[derive(Debug, clap::Parser)]
 struct Args {
@@ -66,17 +66,17 @@ enum Command {
         #[arg(long, conflicts_with = "index")]
         effects: Option<String>,
         #[arg(long)]
-        index: Option<u32>,
+        index: Option<EffectIndex>,
     },
     Profit {
         #[arg(long)]
         routes: PathBuf,
         #[arg(long)]
-        max_mixins: Option<u32>,
+        max_mixins: Option<PathLength>,
         #[arg(long, default_value_t = 0.)]
         markup: f64,
         #[arg(long, default_value_t = 999)]
-        max_price: u32,
+        max_price: Cost,
         #[arg(long, default_value_t = 10)]
         max_results: usize,
     },
@@ -116,7 +116,7 @@ fn shortest_path<const N: u8, const K: u8>(
     let costs = SUBSTANCES
         .iter()
         .copied()
-        .map(|s| substance_cost(s) as u32)
+        .map(|s| substance_cost(s) as Cost)
         .collect::<Vec<_>>();
 
     multiobjective_shortest_path(graph, &costs, starting).into()
@@ -125,7 +125,7 @@ fn shortest_path<const N: u8, const K: u8>(
 fn trace_path(start: Label, paths: &FlatPaths) -> Vec<Substance> {
     let mut path = Vec::with_capacity(start.length as usize);
     let mut l = start;
-    while let Some((next, s)) = l.previous {
+    while let Some((next, s)) = l.backlink() {
         path.push(s);
         l = *paths
             .get(next as usize)
@@ -208,7 +208,7 @@ fn routes_metadata(routes: &FlattenedResultsFile) {
     ] {
         let mut total = 0usize;
         let mut counts: HashMap<usize, usize> = HashMap::new();
-        let mut lengths: HashMap<u32, usize> = HashMap::new();
+        let mut lengths: HashMap<PathLength, usize> = HashMap::new();
 
         let mut longest = TopSet::new(5, PartialOrd::gt);
 
@@ -293,6 +293,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             bar.set_message("Computing price multipliers");
             let price_multipliers = (0..encoder.maximum_index())
                 .map(|idx| rules.price_multiplier(Effects::from(encoder.decode(idx))))
+                .map(|p| (p * 100.).round() as u16)
                 .collect::<Vec<_>>();
 
             let paths = FlattenedResultsFile {
@@ -331,7 +332,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             ]
             .par_iter()
             .filter_map(|(d, fp)| {
-                search_inexact(target_effects, &encoder, &fp).map(|p| (*d, p, *fp))
+                search_inexact(target_effects, &encoder, fp).map(|p| (*d, p, *fp))
             })
             .collect::<Vec<_>>()
             {
@@ -412,7 +413,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let shortest_paths: FlattenedResultsFile =
                 savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
 
-            let max_mixins = max_mixins.unwrap_or(999);
+            let max_mixins = max_mixins.unwrap_or(PathLength::MAX);
 
             for (drug, fp, results) in [
                 (Drugs::OGKush, &shortest_paths.kush),
@@ -428,14 +429,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let mut top = TopSet::new(max_results, PartialOrd::gt);
                 let base_price = base_price(d) * (1. + markup);
                 for idx in 0..encoder.maximum_index() as usize {
-                    let mult = shortest_paths.price_multipliers[idx];
+                    let mult = shortest_paths.price_multipliers[idx] as f64 / 100.;
                     let best = fp
                         .get(idx)
                         .iter()
                         .filter(|label| label.length <= max_mixins)
                         .min_by_key(|l| l.cost);
                     if let Some(best) = best {
-                        let sell_price = max_price.min((base_price * mult).round() as u32) as i32;
+                        let sell_price = max_price.min((base_price * mult).round() as Cost) as i32;
                         let profit = sell_price - best.cost as i32;
                         top.insert((profit, sell_price, idx, best));
                     }

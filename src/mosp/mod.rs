@@ -9,15 +9,27 @@ use savefile_derive::Savefile;
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, Reverse};
 
-type EffectIndex = u32;
-type Cost = u32;
-type PathLength = u32;
+pub type EffectIndex = u32;
+pub type Cost = u16;
+pub type PathLength = u8;
+
+const NICHE: EffectIndex = EffectIndex::MAX;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Savefile, Serialize, Deserialize)]
 pub struct Label {
     pub length: PathLength,
     pub cost: Cost,
-    pub previous: Option<(EffectIndex, Substance)>,
+    previous_substance: Substance,
+    backlink: EffectIndex,
+}
+
+impl Label {
+    pub fn backlink(&self) -> Option<(EffectIndex, Substance)> {
+        match self.backlink {
+            NICHE => None,
+            _ => Some((self.backlink, self.previous_substance)),
+        }
+    }
 }
 
 type Queue = PriorityQueue<EffectIndex, Reverse<Label>>;
@@ -58,7 +70,8 @@ fn next_candidate_label(
             let new_label = Label {
                 length: old_label.length + 1,
                 cost: old_label.cost + substance_costs[sub as usize],
-                previous: Some((pred, sub)),
+                previous_substance: sub,
+                backlink: node,
             };
             // Test for dominance of existing items over this new candidate
             if label_nondominated_nonequal(new_label, existing_labels) {
@@ -97,7 +110,8 @@ pub fn multiobjective_shortest_path<const N: u8, const K: u8>(
         Reverse(Label {
             length: 0,
             cost: 0,
-            previous: None,
+            previous_substance: Substance::Cuke,
+            backlink: NICHE,
         }),
     );
 
@@ -116,7 +130,8 @@ pub fn multiobjective_shortest_path<const N: u8, const K: u8>(
                 Label {
                     length: label.0.length + 1,
                     cost: label.0.cost + substance_costs[idx],
-                    previous: Some((node, SUBSTANCES[idx])),
+                    previous_substance: SUBSTANCES[idx],
+                    backlink: node,
                 },
                 *child,
                 &permanent_labels[*child as usize],

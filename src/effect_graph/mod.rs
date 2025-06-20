@@ -7,7 +7,7 @@ use std::io::Write;
 
 type EffectIndex = u32;
 
-pub const GRAPH_VERSION: u32 = 1;
+pub const GRAPH_VERSION: u32 = 2;
 
 #[derive(Savefile)]
 pub struct EffectGraph<const N: u8, const K: u8> {
