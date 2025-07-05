@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::OpenOptions;
-use std::io::{BufWriter, Write};
+use std::io::{stdout, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use topset::TopSet;
@@ -79,6 +79,8 @@ enum Command {
         max_price: Cost,
         #[arg(long, default_value_t = 10)]
         max_results: usize,
+        #[arg(long, default_value_t = false)]
+        json: bool,
     },
     Metadata {
         #[arg(long)]
@@ -409,6 +411,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             markup,
             max_price,
             max_results,
+            json,
         } => {
             let shortest_paths: FlattenedResultsFile =
                 savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
@@ -448,16 +451,44 @@ fn main() -> Result<(), Box<dyn Error>> {
             {
                 let mut results = results.into_sorted_vec();
                 results.reverse();
-                println!("{drug}");
+
+                if !json {
+                    println!("\n{drug}");
+                }
+
                 for (profit, sell_price, idx, label) in results {
                     let path = trace_path(*label, fp);
-                    println!(
-                        "{:?}\n  Sell Price: {sell_price}\n  Cost: {}\n  Profit: {profit}\n  Ingredients: {path:?}\n",
-                        Effects::from(encoder.decode(idx as u32)),
-                        label.cost,
-                    );
+                    if json {
+                        #[derive(Serialize)]
+                        struct Output<'s> {
+                            drug: Drugs,
+                            effects: Effects,
+                            sell_price: i32,
+                            cost: Cost,
+                            profit: i32,
+                            ingredients: &'s [Substance],
+                        }
+
+                        serde_json::to_writer(
+                            stdout(),
+                            &Output {
+                                drug,
+                                effects: Effects::from(encoder.decode(idx as u32)),
+                                sell_price,
+                                cost: label.cost,
+                                profit,
+                                ingredients: &path,
+                            },
+                        )?;
+                        println!();
+                    } else {
+                        println!(
+                            "{:?}\n  Sell Price: {sell_price}\n  Cost: {}\n  Profit: {profit}\n  Ingredients: {path:?}\n",
+                            Effects::from(encoder.decode(idx as u32)),
+                            label.cost,
+                        );
+                    }
                 }
-                println!();
             }
             Ok(())
         }
