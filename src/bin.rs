@@ -1,6 +1,8 @@
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{
+    IntoParallelIterator, IntoParallelRefIterator, ParallelExtend, ParallelIterator,
+};
 use savefile_derive::Savefile;
 use schedule1::combinatorial::CombinatorialEncoder;
 use schedule1::effect_graph::{EffectGraph, GRAPH_VERSION};
@@ -88,6 +90,10 @@ enum Command {
 
         #[arg(long)]
         routes: Option<PathBuf>,
+    },
+    RouteSanity {
+        #[arg(long)]
+        routes: PathBuf,
     },
 }
 
@@ -239,6 +245,39 @@ fn routes_metadata(routes: &FlattenedResultsFile) {
         println!("  Longest Minimum Lengths: {longest:?}");
     }
 }
+
+fn route_sanity(routes: &FlattenedResultsFile, max_value: u32) -> Option<Vec<(Drugs, u32)>> {
+    let mut errors = Vec::new();
+    for (drug, paths) in [
+        (Drugs::OGKush, &routes.kush),
+        (Drugs::SourDiesel, &routes.sour_diesel),
+        (Drugs::GreenCrack, &routes.green_crack),
+        (Drugs::GranddaddyPurple, &routes.granddaddy_purple),
+        (Drugs::Meth, &routes.meth_cocaine),
+    ] {
+        errors.par_extend((0..max_value).into_par_iter().filter_map(|idx| {
+            let labels = paths.get(idx as usize);
+            if labels.is_empty() {
+                return None;
+            }
+            for (j, label) in labels[..labels.len() - 1].iter().enumerate() {
+                for other_label in &labels[j + 1..] {
+                    if label.cost >= other_label.cost && label.length >= other_label.length {
+                        return Some((drug, idx));
+                    }
+                }
+            }
+            None
+        }));
+    }
+
+    if errors.is_empty() {
+        None
+    } else {
+        Some(errors)
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
@@ -379,6 +418,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             };
 
             println!("Effects: {:?}", Effects::from(encoder.decode(index)));
+            println!("Index: {index}");
 
             for (drug, paths) in [
                 (Drugs::OGKush, &shortest_paths.kush),
@@ -502,6 +542,28 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let routes = savefile::load_file(r, SHORTEST_PATH_VERSION)?;
                 routes_metadata(&routes);
             }
+            Ok(())
+        }
+        Command::RouteSanity { routes } => {
+            let bar = ProgressBar::new_spinner();
+            bar.enable_steady_tick(Duration::from_millis(100));
+
+            bar.set_message("Loading routes");
+            let routes = savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
+            bar.set_message("Checking sanity");
+            let results = route_sanity(&routes, encoder.maximum_index());
+
+            println!(
+                "{} violations found",
+                results.as_ref().map(|r| r.len()).unwrap_or(0)
+            );
+            if let Some(r) = results {
+                println!("First violations (up to 10):");
+                for rr in r.into_iter().take(10) {
+                    println!("{rr:?}");
+                }
+            }
+
             Ok(())
         }
     }
