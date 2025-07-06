@@ -71,7 +71,7 @@ fn next_candidate_label(
                 length: old_label.length + 1,
                 cost: old_label.cost + substance_costs[sub as usize],
                 previous_substance: sub,
-                backlink: node,
+                backlink: pred,
             };
             // Test for dominance of existing items over this new candidate
             if label_nondominated_nonequal(new_label, existing_labels) {
