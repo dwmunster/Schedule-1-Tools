@@ -246,7 +246,12 @@ fn routes_metadata(routes: &FlattenedResultsFile) {
     }
 }
 
-fn route_sanity(routes: &FlattenedResultsFile, max_value: u32) -> Option<Vec<(Drugs, u32)>> {
+type CheckFun = fn(&FlattenedResultsFile, u32) -> Option<Vec<(Drugs, u32)>>;
+
+fn check_pareto_optimality(
+    routes: &FlattenedResultsFile,
+    max_value: u32,
+) -> Option<Vec<(Drugs, u32)>> {
     let mut errors = Vec::new();
     for (drug, paths) in [
         (Drugs::OGKush, &routes.kush),
@@ -265,6 +270,35 @@ fn route_sanity(routes: &FlattenedResultsFile, max_value: u32) -> Option<Vec<(Dr
                     if label.cost >= other_label.cost && label.length >= other_label.length {
                         return Some((drug, idx));
                     }
+                }
+            }
+            None
+        }));
+    }
+
+    if errors.is_empty() {
+        None
+    } else {
+        Some(errors)
+    }
+}
+
+fn check_route_costs(routes: &FlattenedResultsFile, max_value: u32) -> Option<Vec<(Drugs, u32)>> {
+    let mut errors = Vec::new();
+    for (drug, paths) in [
+        (Drugs::OGKush, &routes.kush),
+        (Drugs::SourDiesel, &routes.sour_diesel),
+        (Drugs::GreenCrack, &routes.green_crack),
+        (Drugs::GranddaddyPurple, &routes.granddaddy_purple),
+        (Drugs::Meth, &routes.meth_cocaine),
+    ] {
+        errors.par_extend((0..max_value).into_par_iter().filter_map(|idx| {
+            let labels = paths.get(idx as usize);
+            for label in labels {
+                let p = trace_path(*label, paths);
+                let actual_cost: u16 = p.iter().map(|s| substance_cost(*s)).sum::<i64>() as u16;
+                if actual_cost != label.cost {
+                    return Some((drug, idx));
                 }
             }
             None
@@ -550,17 +584,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             bar.set_message("Loading routes");
             let routes = savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
-            bar.set_message("Checking sanity");
-            let results = route_sanity(&routes, encoder.maximum_index());
-
-            println!(
-                "{} violations found",
-                results.as_ref().map(|r| r.len()).unwrap_or(0)
-            );
-            if let Some(r) = results {
-                println!("First violations (up to 10):");
-                for rr in r.into_iter().take(10) {
-                    println!("{rr:?}");
+            let cases: &[(&str, CheckFun)] = &[
+                ("pareto optimality", check_pareto_optimality),
+                ("path cost", check_route_costs),
+            ];
+            let max_idx = encoder.maximum_index();
+            for (label, fun) in cases {
+                bar.set_message(format!("Checking {label}"));
+                let results = fun(&routes, max_idx);
+                println!(
+                    "{label}: {} violations found",
+                    results.as_ref().map(|r| r.len()).unwrap_or(0)
+                );
+                if let Some(r) = results {
+                    println!("First violations (up to 10):");
+                    for rr in r.into_iter().take(10) {
+                        println!("{rr:?}");
+                    }
                 }
             }
 
