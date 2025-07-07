@@ -390,11 +390,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
 
+            let target_effects =
+                bitflags::parser::from_str_strict(&effects).map_err(|e| e.to_string())?;
+
             bar.set_message("Loading routes");
             let shortest_paths: FlattenedResultsFile =
                 savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
-            let target_effects =
-                bitflags::parser::from_str_strict(&effects).map_err(|e| e.to_string())?;
+
             bar.set_message("Searching for matching routes");
 
             bar.set_message("Searching for matching routes");
@@ -437,10 +439,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             let bar = ProgressBar::new_spinner();
             bar.enable_steady_tick(Duration::from_millis(100));
 
-            bar.set_message("Loading routes");
-            let shortest_paths: FlattenedResultsFile =
-                savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
-
             let index = match (index, effects) {
                 (Some(i), _) => i,
                 (None, Some(e)) => {
@@ -450,6 +448,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 _ => panic!("index and effects cannot both be None"),
             };
+
+            bar.set_message("Loading routes");
+            let shortest_paths: FlattenedResultsFile =
+                savefile::load_file(routes, SHORTEST_PATH_VERSION)?;
 
             println!("Effects: {:?}", Effects::from(encoder.decode(index)));
             println!("Index: {index}");
